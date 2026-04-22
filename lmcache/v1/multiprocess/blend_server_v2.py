@@ -50,7 +50,7 @@ from lmcache.logging import init_logger
 from lmcache.v1.distributed.api import (
     MemoryLayoutDesc,
     ObjectKey,
-    ipc_keys_to_object_keys,
+    ipc_key_to_object_keys,
 )
 from lmcache.v1.distributed.config import (
     StorageManagerConfig,
@@ -62,12 +62,14 @@ from lmcache.v1.gpu_connector.gpu_ops import (
     lmcache_memcpy_async_h2d,
 )
 from lmcache.v1.mp_observability.config import (
-    PrometheusConfig,
-    parse_args_to_prometheus_config,
+    ObservabilityConfig,
+    init_observability,
+    parse_args_to_observability_config,
 )
-from lmcache.v1.mp_observability.prometheus_controller import (
-    get_prometheus_controller,
-    init_prometheus_controller,
+from lmcache.v1.mp_observability.trace import maybe_initialize_trace_recorder
+from lmcache.v1.multiprocess.config import (
+    MPServerConfig,
+    parse_args_to_mp_server_config,
 )
 from lmcache.v1.multiprocess.custom_types import (
     CBMatchResult,
@@ -96,8 +98,6 @@ logger = init_logger(__name__)
 
 class BlendTokenRangeMatcher:
     # TODO(Jiayi): Needs thread-safety for this class.
-    # TODO(Jiayi): Currently, the table size is fixed. We need to support
-    # dynamic expanding or eviction.
     """Fast token-range matcher using polynomial rolling/chunk hashes and a
     direct-address lookup table.
 
@@ -108,13 +108,18 @@ class BlendTokenRangeMatcher:
     sized by an arbitrary max hash — no memory explosion.
 
     Auxiliary storage:
-      _chunk_token_hash[i] : caller-supplied token_hash for chunk i
-      _token_hash_to_start : token_hash → start position in the registered seq
+      _chunk_token_hash[i]      : token_hash for chunk i (None if evicted)
+      _token_hash_to_start      : token_hash → start position in seq
+      _compact_id_to_slot[i]    : table slot for compact_id i
+      _token_hash_to_compact_id : token_hash → compact_chunk_id
 
-    on_new_token_hashes  – register a sequence; chunk_hash_windows_numba(token_hashes)
-                        builds fingerprints, update_table_id_numba writes compact IDs.
-    match_sub_sequence – rolling_hash_windows_numba + unique_hits_direct_id_numba
-                         (num_ids=_TABLE_SIZE) → compact IDs → token_hash → start.
+    Methods:
+      on_new_token_hashes  – register a sequence; builds fingerprints
+                             and writes compact IDs.
+      match_sub_sequence   – sliding-window probe → compact IDs →
+                             token_hash → start. Skips evicted entries.
+      remove_chunks        – lazily evict stale entries. Clears the
+                             table slot and auxiliary maps.
     """
 
     _TABLE_BITS: int = 20  # 2^20 ≈ 1 M entries
@@ -127,9 +132,13 @@ class BlendTokenRangeMatcher:
         self._table_id = np.full(self._TABLE_SIZE, -1, dtype=np.int64)
         self._mask = np.uint64(self._TABLE_SIZE - 1)
         # compact_chunk_id → caller-supplied token_hash (full bytes)
-        self._chunk_token_hash: list[bytes] = []
+        self._chunk_token_hash: list[bytes | None] = []
         # token_hash → start position in its registered sequence
         self._token_hash_to_start: dict[bytes, int] = {}
+        # compact_chunk_id → table slot index (for reverse lookup during eviction)
+        self._compact_id_to_slot = np.full(self._TABLE_SIZE, -1, dtype=np.int64)
+        # token_hash → compact_chunk_id (for eviction lookup)
+        self._token_hash_to_compact_id: dict[bytes, int] = {}
 
     def on_new_token_hashes(
         self,
@@ -161,11 +170,15 @@ class BlendTokenRangeMatcher:
         # Write table: poly_chunk_hash → compact_chunk_id
         update_table_id_numba(chunk_hashes, self._table_id, compact_ids)
 
-        # Persist compact_id → token_hash and token_hash → start
+        # Persist compact_id → token_hash, token_hash → start, and reverse maps
         for i in range(n):
             th = token_hashes[i]
+            cid = int(compact_ids[i])
+            slot = int(chunk_hashes[i]) & int(self._mask)
             self._chunk_token_hash.append(th)
             self._token_hash_to_start[th] = i * self.chunk_size
+            self._compact_id_to_slot[cid] = slot
+            self._token_hash_to_compact_id[th] = cid
 
     def match_sub_sequence(
         self,
@@ -174,7 +187,8 @@ class BlendTokenRangeMatcher:
         """Find stored chunks whose fingerprints appear anywhere in token_ids.
 
         Uses a sliding-window rolling hash so matches need not be aligned to
-        chunk_size boundaries in the query.
+        chunk_size boundaries in the query.  Entries previously evicted via
+        remove_chunks (token_hash set to None) are silently skipped.
 
         Args:
             token_ids: Query token sequence to probe (raw token IDs as uint64).
@@ -217,6 +231,8 @@ class BlendTokenRangeMatcher:
         for cid in hit_ids:
             cid_int = int(cid)
             th = self._chunk_token_hash[cid_int]
+            if th is None:
+                continue
             old_st = self._token_hash_to_start.get(th)
             cur_st = cid_to_query_pos.get(cid_int)
             if old_st is None or cur_st is None:
@@ -231,6 +247,32 @@ class BlendTokenRangeMatcher:
                 )
             )
         return results
+
+    def remove_chunks(self, token_hashes: list[bytes]) -> None:
+        """Evict stale entries whose backing data is no longer in storage.
+
+        Args:
+            token_hashes: Token hashes of chunks to remove from the table.
+        """
+        for th in token_hashes:
+            cid = self._token_hash_to_compact_id.get(th)
+            if cid is None:
+                continue
+            # Clear the table slot
+            slot = int(self._compact_id_to_slot[cid])
+            if slot < 0:
+                logger.warning(
+                    "compact_id %d has no valid table slot; "
+                    "entry may have been evicted twice",
+                    cid,
+                )
+                continue
+            self._table_id[slot] = -1
+            self._compact_id_to_slot[cid] = -1
+            # Clean up auxiliary maps
+            self._chunk_token_hash[cid] = None
+            self._token_hash_to_start.pop(th, None)
+            del self._token_hash_to_compact_id[th]
 
 
 # Main class and main functions
@@ -302,6 +344,8 @@ class BlendEngineV2(MPCacheEngine):
 
         Uses BlendTokenRangeMatcher for a fast local pre-filter, then submits
         prefetch tasks for matched chunks using their stored hashes directly.
+        Chunks that the fingerprint table matched but are no longer present in
+        storage are lazily evicted from the matcher via remove_chunks.
 
         Args:
             key: IPCCacheEngineKey containing the token ids to lookup
@@ -352,22 +396,13 @@ class BlendEngineV2(MPCacheEngine):
 
         # Submit prefetch for each group using CBMatchResult.hash directly
         for group in groups:
-            obj_keys = ipc_keys_to_object_keys(
-                [
-                    IPCCacheEngineKey(
-                        model_name=key.model_name,
-                        world_size=key.world_size,
-                        worker_id=key.worker_id,
-                        token_ids=key.token_ids[r.cur_st : r.cur_ed],
-                        start=r.cur_st,
-                        end=r.cur_ed,
-                        request_id=key.request_id,
-                        chunk_hash=r.hash,
-                    )
-                    for r in group
-                ]
+            chunk_hashes = [r.hash for r in group]
+            obj_keys = ipc_key_to_object_keys(key, chunk_hashes)
+            handle = self.storage_manager.submit_prefetch_task(
+                obj_keys,
+                layout_desc,
+                external_request_id=key.request_id,
             )
-            handle = self.storage_manager.submit_prefetch_task(obj_keys, layout_desc)
             prefetch_handles.append(handle)
 
             logger.debug(
@@ -379,6 +414,7 @@ class BlendEngineV2(MPCacheEngine):
         # TODO(Jiayi): We need to follow how lookup is handled in server.py
         # to optimize performance.
         # Collect only the CBMatchResults for chunks actually found in storage
+        stale_hashes: list[bytes] = []
         for handle, group in zip(prefetch_handles, groups, strict=False):
             found_count = None
             while True:
@@ -398,6 +434,8 @@ class BlendEngineV2(MPCacheEngine):
             end = group[-1].cur_ed
             if found_count > 0:
                 found_cb_match_result.extend(group[:found_count])
+                # Chunks after found_count in the group are stale
+                stale_hashes.extend(r.hash for r in group[found_count:])
                 logger.debug(
                     "Found %d pre-computed chunks for range (%d, %d)",
                     found_count,
@@ -405,11 +443,20 @@ class BlendEngineV2(MPCacheEngine):
                     end,
                 )
             else:
+                stale_hashes.extend(r.hash for r in group)
                 logger.debug(
                     "No pre-computed chunks found for range (%d, %d)",
                     start,
                     end,
                 )
+
+        # Evict stale entries from the fingerprint table
+        if stale_hashes:
+            self._token_range_matcher.remove_chunks(stale_hashes)
+            logger.debug(
+                "Evicted %d stale chunks from fingerprint table",
+                len(stale_hashes),
+            )
 
         return found_cb_match_result
 
@@ -518,13 +565,9 @@ class BlendEngineV2(MPCacheEngine):
         """
         # Compute normal prefix hashes so these chunks are accessible both via
         # the CB lookup path and via the standard lookup/retrieve path.
-        hashed_ipc_keys = key.to_hash_keys(
-            hasher=self.token_hasher,
-            full_chunk_only=True,
-            prefix_hash=None,
-        )
+        chunk_hashes = self.token_hasher.compute_chunk_hashes(list(key.token_ids))
         # convert to object key
-        obj_keys = ipc_keys_to_object_keys(hashed_ipc_keys)
+        obj_keys = ipc_key_to_object_keys(key, chunk_hashes)
 
         assert instance_id in self._cb_gpu_contexts, (
             f"Instance ID {instance_id} not registered for CB KV cache"
@@ -536,10 +579,7 @@ class BlendEngineV2(MPCacheEngine):
         )
 
         # Register chunk hashes with the local matcher for fast sub-sequence lookup
-        token_hashes = []
-        for k in hashed_ipc_keys:
-            assert k.chunk_hash is not None
-            token_hashes.append(k.chunk_hash)
+        token_hashes = list(chunk_hashes)
 
         # NOTE(Jiayi): We only register the token hashes for worker_id 0 or None to
         # avoid duplicate registration across workers.
@@ -594,21 +634,8 @@ class BlendEngineV2(MPCacheEngine):
 
         # One obj_key per match_result, in cur_st order
         cb_match_result = sorted(cb_match_result, key=lambda r: r.cur_st)
-        all_obj_keys = ipc_keys_to_object_keys(
-            [
-                IPCCacheEngineKey(
-                    model_name=key.model_name,
-                    world_size=key.world_size,
-                    worker_id=key.worker_id,
-                    token_ids=key.token_ids[r.cur_st : r.cur_ed],
-                    start=r.cur_st,
-                    end=r.cur_ed,
-                    request_id=key.request_id,
-                    chunk_hash=r.hash,
-                )
-                for r in cb_match_result
-            ]
-        )
+        chunk_hashes = [r.hash for r in cb_match_result]
+        all_obj_keys = ipc_key_to_object_keys(key, chunk_hashes)
 
         logger.debug("DEBUG object keys to retrieve: %s", all_obj_keys)
 
@@ -639,8 +666,8 @@ class BlendEngineV2(MPCacheEngine):
                             lmcache_memcpy_async_h2d(memory_obj, tmp_buffer)
                             target_buffer.copy_(tmp_buffer, non_blocking=True)
 
-            except Exception as e:
-                logger.error("Error during retrieving prefetched results: %s", e)
+            except Exception:
+                logger.exception("Error during retrieving prefetched results")
                 return event.ipc_handle(), False
 
             finally:
@@ -686,14 +713,10 @@ class BlendEngineV2(MPCacheEngine):
             final chunks, and a boolean flag indicating if the store is successful.
         """
         # Compute normal hash for the keys
-        hashed_ipc_keys = key.to_hash_keys(
-            hasher=self.token_hasher,
-            full_chunk_only=True,
-            prefix_hash=None,
-        )
+        chunk_hashes = self.token_hasher.compute_chunk_hashes(list(key.token_ids))
 
         # convert to object key
-        obj_keys = ipc_keys_to_object_keys(hashed_ipc_keys)
+        obj_keys = ipc_key_to_object_keys(key, chunk_hashes)
 
         # Get GPU context
         assert instance_id in self._cb_gpu_contexts, (
@@ -727,47 +750,42 @@ def add_handler_helper(
 
 
 def run_cache_server(
+    mp_config: MPServerConfig,
     storage_manager_config: StorageManagerConfig,
-    prometheus_config: PrometheusConfig,
-    host: str = "localhost",
-    port: int = 5555,
-    chunk_size: int = 256,
-    max_workers: int = 1,
+    obs_config: ObservabilityConfig,
     return_engine: bool = False,
-    hash_algorithm: str = "blake3",
 ):
     """
     Run the LMCache cache server with ZMQ message queue.
 
     Args:
+        mp_config: Configuration for the ZMQ multiprocess server
         storage_manager_config: Configuration for the storage manager
-        prometheus_config: Configuration for the Prometheus observability stack
-        host: ZMQ server host
-        port: ZMQ server port
-        chunk_size: Chunk size for KV cache operations
-        max_workers: Maximum number of worker threads for ZMQ server
+        obs_config: Configuration for the observability stack
         return_engine: If True, return (server, engine) after starting;
                        if False, run blocking loop to keep server alive
-        hash_algorithm: Hash algorithm for token-based operations
 
     Returns:
-        If return_engine is True: tuple of (MessageQueueServer, MPCacheEngine)
+        If return_engine is True: tuple of (MessageQueueServer, BlendEngineV2)
         If return_engine is False: None (blocks until interrupted)
     """
-    # Initialize global prometheus controller
-    init_prometheus_controller(prometheus_config)
+    event_bus = init_observability(obs_config)
+
+    # Wire up the trace recorder (no-op when --trace-level is unset).
+    maybe_initialize_trace_recorder(event_bus, obs_config, storage_manager_config)
 
     # Initialize the engine (loggers self-register with the global controller)
     engine = BlendEngineV2(
         storage_manager_config=storage_manager_config,
-        chunk_size=chunk_size,
-        hash_algorithm=hash_algorithm,
+        chunk_size=mp_config.chunk_size,
+        hash_algorithm=mp_config.hash_algorithm,
     )
 
     # Initialize the message queue server
     context = zmq.Context.instance()
     server = MessageQueueServer(
-        bind_url=f"tcp://{host}:{port}", context=context, max_workers=max_workers
+        bind_url=f"tcp://{mp_config.host}:{mp_config.port}",
+        context=context,
     )
 
     # Add handlers for original server
@@ -786,7 +804,11 @@ def run_cache_server(
     add_handler_helper(server, RequestType.GET_CHUNK_SIZE, engine.get_chunk_size)
     add_handler_helper(server, RequestType.END_SESSION, engine.end_session)
     add_handler_helper(server, RequestType.NOOP, engine.debug)
-
+    add_handler_helper(
+        server,
+        RequestType.REPORT_BLOCK_ALLOCATION,
+        engine.report_block_allocations,
+    )
     # Add handler for blend operations
     add_handler_helper(
         server, RequestType.CB_REGISTER_KV_CACHE, engine.cb_register_kv_cache
@@ -804,14 +826,42 @@ def run_cache_server(
         server, RequestType.CB_RETRIEVE_PRE_COMPUTED_V2, engine.cb_retrieve_pre_computed
     )
     add_handler_helper(server, RequestType.CB_STORE_FINAL, engine.cb_store_final)
+    add_handler_helper(server, RequestType.PING, engine.ping)
 
-    logger.info("LMCache ZMQ cache server is running on tcp://%s:%d", host, port)
+    # Assign thread pools
+    server.add_affinity_thread_pool(
+        [
+            RequestType.STORE,
+            RequestType.RETRIEVE,
+            RequestType.CB_STORE_PRE_COMPUTED,
+            RequestType.CB_RETRIEVE_PRE_COMPUTED_V2,
+            RequestType.CB_STORE_FINAL,
+        ],
+        max_workers=mp_config.max_gpu_workers,
+    )
+    server.add_normal_thread_pool(
+        [
+            RequestType.LOOKUP,
+            RequestType.QUERY_PREFETCH_STATUS,
+            RequestType.FREE_LOOKUP_LOCKS,
+            RequestType.END_SESSION,
+            RequestType.CLEAR,
+            RequestType.CB_LOOKUP_PRE_COMPUTED_V2,
+            RequestType.PING,
+            RequestType.REPORT_BLOCK_ALLOCATION,
+        ],
+        max_workers=mp_config.max_cpu_workers,
+    )
+
+    logger.info(
+        "LMCache ZMQ cache server is running on tcp://%s:%d",
+        mp_config.host,
+        mp_config.port,
+    )
     # Start the ZMQ server
     torch.cuda.init()
     server.start()
 
-    # Start prometheus controller after engine creation (loggers are registered)
-    get_prometheus_controller().start()
     logger.info("LMCache cache blend v2 server is running...")
 
     # Return server and engine if requested (for HTTP server integration)
@@ -824,21 +874,18 @@ def run_cache_server(
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("Shutting down server...")
-        get_prometheus_controller().stop()
+        event_bus.stop()
         server.close()
         engine.close()
 
 
 if __name__ == "__main__":
     args = parse_args()
+    mp_config = parse_args_to_mp_server_config(args)
     storage_manager_config = parse_args_to_config(args)
-    prometheus_config = parse_args_to_prometheus_config(args)
+    obs_config = parse_args_to_observability_config(args)
     run_cache_server(
+        mp_config=mp_config,
         storage_manager_config=storage_manager_config,
-        prometheus_config=prometheus_config,
-        host=args.host,
-        port=args.port,
-        chunk_size=args.chunk_size,
-        max_workers=args.max_workers,
-        hash_algorithm=args.hash_algorithm,
+        obs_config=obs_config,
     )
