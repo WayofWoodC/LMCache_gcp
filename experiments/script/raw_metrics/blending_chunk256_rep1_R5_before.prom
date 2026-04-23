@@ -1,0 +1,367 @@
+# HELP python_gc_objects_collected_total Objects collected during gc
+# TYPE python_gc_objects_collected_total counter
+python_gc_objects_collected_total{generation="0"} 59934.0
+python_gc_objects_collected_total{generation="1"} 5744.0
+python_gc_objects_collected_total{generation="2"} 3221.0
+# HELP python_gc_objects_uncollectable_total Uncollectable objects found during GC
+# TYPE python_gc_objects_uncollectable_total counter
+python_gc_objects_uncollectable_total{generation="0"} 0.0
+python_gc_objects_uncollectable_total{generation="1"} 0.0
+python_gc_objects_uncollectable_total{generation="2"} 0.0
+# HELP python_gc_collections_total Number of times this generation was collected
+# TYPE python_gc_collections_total counter
+python_gc_collections_total{generation="0"} 2092.0
+python_gc_collections_total{generation="1"} 189.0
+python_gc_collections_total{generation="2"} 20.0
+# HELP python_info Python platform information
+# TYPE python_info gauge
+python_info{implementation="CPython",major="3",minor="12",patchlevel="12",version="3.12.12"} 1.0
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 4.1837268992e+010
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 7.388184576e+09
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.77526535887e+09
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 42.45
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 130.0
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 1.048576e+06
+# HELP lmcache:num_retrieve_requests_total Total number of retrieve requests sent to lmcache
+# TYPE lmcache:num_retrieve_requests_total counter
+lmcache:num_retrieve_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_retrieve_requests_created Total number of retrieve requests sent to lmcache
+# TYPE lmcache:num_retrieve_requests_created gauge
+lmcache:num_retrieve_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987760897e+09
+# HELP lmcache:num_store_requests_total Total number of store requests sent to lmcache
+# TYPE lmcache:num_store_requests_total counter
+lmcache:num_store_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_store_requests_created Total number of store requests sent to lmcache
+# TYPE lmcache:num_store_requests_created gauge
+lmcache:num_store_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761152e+09
+# HELP lmcache:num_lookup_requests_total Total number of lookup requests sent to lmcache
+# TYPE lmcache:num_lookup_requests_total counter
+lmcache:num_lookup_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_lookup_requests_created Total number of lookup requests sent to lmcache
+# TYPE lmcache:num_lookup_requests_created gauge
+lmcache:num_lookup_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761316e+09
+# HELP lmcache:num_requested_tokens_total Total number of tokens requested from lmcache
+# TYPE lmcache:num_requested_tokens_total counter
+lmcache:num_requested_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_requested_tokens_created Total number of tokens requested from lmcache
+# TYPE lmcache:num_requested_tokens_created gauge
+lmcache:num_requested_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761455e+09
+# HELP lmcache:num_hit_tokens_total Total number of tokens hit in lmcache
+# TYPE lmcache:num_hit_tokens_total counter
+lmcache:num_hit_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_hit_tokens_created Total number of tokens hit in lmcache
+# TYPE lmcache:num_hit_tokens_created gauge
+lmcache:num_hit_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761571e+09
+# HELP lmcache:num_stored_tokens_total Total number of tokens stored in lmcache including evicted ones
+# TYPE lmcache:num_stored_tokens_total counter
+lmcache:num_stored_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_stored_tokens_created Total number of tokens stored in lmcache including evicted ones
+# TYPE lmcache:num_stored_tokens_created gauge
+lmcache:num_stored_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761679e+09
+# HELP lmcache:num_lookup_tokens_total Total number of tokens requested in lookup from lmcache
+# TYPE lmcache:num_lookup_tokens_total counter
+lmcache:num_lookup_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_lookup_tokens_created Total number of tokens requested in lookup from lmcache
+# TYPE lmcache:num_lookup_tokens_created gauge
+lmcache:num_lookup_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761784e+09
+# HELP lmcache:num_lookup_hits_total Total number of tokens hit in lookup from lmcache
+# TYPE lmcache:num_lookup_hits_total counter
+lmcache:num_lookup_hits_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_lookup_hits_created Total number of tokens hit in lookup from lmcache
+# TYPE lmcache:num_lookup_hits_created gauge
+lmcache:num_lookup_hits_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987761884e+09
+# HELP lmcache:num_vllm_hit_tokens_total Number of hit tokens in vllm
+# TYPE lmcache:num_vllm_hit_tokens_total counter
+lmcache:num_vllm_hit_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_vllm_hit_tokens_created Number of hit tokens in vllm
+# TYPE lmcache:num_vllm_hit_tokens_created gauge
+lmcache:num_vllm_hit_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.775265398776212e+09
+# HELP lmcache:num_prompt_tokens_total Number of prompt tokens in lmcache
+# TYPE lmcache:num_prompt_tokens_total counter
+lmcache:num_prompt_tokens_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_prompt_tokens_created Number of prompt tokens in lmcache
+# TYPE lmcache:num_prompt_tokens_created gauge
+lmcache:num_prompt_tokens_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.775265398776202e+09
+# HELP lmcache:num_remote_read_requests_total Total number of requests read from remote backends in lmcache
+# TYPE lmcache:num_remote_read_requests_total counter
+lmcache:num_remote_read_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_remote_read_requests_created Total number of requests read from remote backends in lmcache
+# TYPE lmcache:num_remote_read_requests_created gauge
+lmcache:num_remote_read_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762225e+09
+# HELP lmcache:num_remote_read_bytes_total Total number of bytes read from remote backends in lmcache
+# TYPE lmcache:num_remote_read_bytes_total counter
+lmcache:num_remote_read_bytes_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_remote_read_bytes_created Total number of bytes read from remote backends in lmcache
+# TYPE lmcache:num_remote_read_bytes_created gauge
+lmcache:num_remote_read_bytes_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762327e+09
+# HELP lmcache:num_remote_write_requests_total Total number of requests write to remote backends in lmcache
+# TYPE lmcache:num_remote_write_requests_total counter
+lmcache:num_remote_write_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_remote_write_requests_created Total number of requests write to remote backends in lmcache
+# TYPE lmcache:num_remote_write_requests_created gauge
+lmcache:num_remote_write_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762432e+09
+# HELP lmcache:num_remote_write_bytes_total Total number of bytes write to remote backends in lmcache
+# TYPE lmcache:num_remote_write_bytes_total counter
+lmcache:num_remote_write_bytes_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_remote_write_bytes_created Total number of bytes write to remote backends in lmcache
+# TYPE lmcache:num_remote_write_bytes_created gauge
+lmcache:num_remote_write_bytes_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762525e+09
+# HELP lmcache:local_cpu_evict_count_total Total number of evict in local cpu backend
+# TYPE lmcache:local_cpu_evict_count_total counter
+lmcache:local_cpu_evict_count_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_cpu_evict_count_created Total number of evict in local cpu backend
+# TYPE lmcache:local_cpu_evict_count_created gauge
+lmcache:local_cpu_evict_count_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762616e+09
+# HELP lmcache:local_cpu_evict_keys_count_total Total number of evict keys in local cpu backend
+# TYPE lmcache:local_cpu_evict_keys_count_total counter
+lmcache:local_cpu_evict_keys_count_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_cpu_evict_keys_count_created Total number of evict keys in local cpu backend
+# TYPE lmcache:local_cpu_evict_keys_count_created gauge
+lmcache:local_cpu_evict_keys_count_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987762723e+09
+# HELP lmcache:local_cpu_evict_failed_count_total Total number of failed eviction in local cpu backend
+# TYPE lmcache:local_cpu_evict_failed_count_total counter
+lmcache:local_cpu_evict_failed_count_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_cpu_evict_failed_count_created Total number of failed eviction in local cpu backend
+# TYPE lmcache:local_cpu_evict_failed_count_created gauge
+lmcache:local_cpu_evict_failed_count_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.775265398776282e+09
+# HELP lmcache:forced_unpin_count_total Total number of forced unpin due to timeout
+# TYPE lmcache:forced_unpin_count_total counter
+lmcache:forced_unpin_count_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:forced_unpin_count_created Total number of forced unpin due to timeout
+# TYPE lmcache:forced_unpin_count_created gauge
+lmcache:forced_unpin_count_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.775265398776292e+09
+# HELP lmcache:lookup_0_hit_requests_total Total number of 0 hit lookup requests
+# TYPE lmcache:lookup_0_hit_requests_total counter
+lmcache:lookup_0_hit_requests_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:lookup_0_hit_requests_created Total number of 0 hit lookup requests
+# TYPE lmcache:lookup_0_hit_requests_created gauge
+lmcache:lookup_0_hit_requests_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.775265398776305e+09
+# HELP lmcache:num_slow_retrieval_by_time_total Total number of slow retrievals by time threshold
+# TYPE lmcache:num_slow_retrieval_by_time_total counter
+lmcache:num_slow_retrieval_by_time_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_slow_retrieval_by_time_created Total number of slow retrievals by time threshold
+# TYPE lmcache:num_slow_retrieval_by_time_created gauge
+lmcache:num_slow_retrieval_by_time_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987763155e+09
+# HELP lmcache:num_slow_retrieval_by_speed_total Total number of slow retrievals by speed threshold
+# TYPE lmcache:num_slow_retrieval_by_speed_total counter
+lmcache:num_slow_retrieval_by_speed_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:num_slow_retrieval_by_speed_created Total number of slow retrievals by speed threshold
+# TYPE lmcache:num_slow_retrieval_by_speed_created gauge
+lmcache:num_slow_retrieval_by_speed_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987763247e+09
+# HELP lmcache:retrieve_hit_rate Hit rate of lmcache retrieve requests since last log
+# TYPE lmcache:retrieve_hit_rate gauge
+lmcache:retrieve_hit_rate{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:lookup_hit_rate Hit rate of lmcache lookup requests since last log
+# TYPE lmcache:lookup_hit_rate gauge
+lmcache:lookup_hit_rate{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_cache_usage Local cache usage (bytes) of lmcache
+# TYPE lmcache:local_cache_usage gauge
+lmcache:local_cache_usage{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:remote_cache_usage Remote cache usage (bytes) of lmcache
+# TYPE lmcache:remote_cache_usage gauge
+lmcache:remote_cache_usage{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_storage_usage Local storage usage (bytes) of lmcache
+# TYPE lmcache:local_storage_usage gauge
+lmcache:local_storage_usage{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:active_memory_objs_count The number of active memory objects
+# TYPE lmcache:active_memory_objs_count gauge
+lmcache:active_memory_objs_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:pinned_memory_objs_count The number of pinned memory objects
+# TYPE lmcache:pinned_memory_objs_count gauge
+lmcache:pinned_memory_objs_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:time_to_retrieve Time to retrieve from lmcache (seconds)
+# TYPE lmcache:time_to_retrieve histogram
+# HELP lmcache:time_to_store Time to store to lmcache (seconds)
+# TYPE lmcache:time_to_store histogram
+# HELP lmcache:time_to_lookup Time to lookup in lmcache (seconds)
+# TYPE lmcache:time_to_lookup histogram
+# HELP lmcache:retrieve_process_tokens_time Time to process tokens in retrieve (seconds)
+# TYPE lmcache:retrieve_process_tokens_time histogram
+# HELP lmcache:retrieve_broadcast_time Time to broadcast memory objects in retrieve (seconds)
+# TYPE lmcache:retrieve_broadcast_time histogram
+# HELP lmcache:retrieve_to_gpu_time Time to move data to GPU in retrieve (seconds)
+# TYPE lmcache:retrieve_to_gpu_time histogram
+# HELP lmcache:remote_backend_batched_get_blocking_time Time to get data from remote backend (seconds)
+# TYPE lmcache:remote_backend_batched_get_blocking_time histogram
+# HELP lmcache:instrumented_connector_batched_get_time Time used by the connector (seconds)
+# TYPE lmcache:instrumented_connector_batched_get_time histogram
+# HELP lmcache:store_process_tokens_time Time to process tokens in store (seconds)
+# TYPE lmcache:store_process_tokens_time histogram
+# HELP lmcache:store_from_gpu_time Time to move data from GPU in store (seconds)
+# TYPE lmcache:store_from_gpu_time histogram
+# HELP lmcache:store_put_time Time to put data to storage in store (seconds)
+# TYPE lmcache:store_put_time histogram
+# HELP lmcache:retrieve_speed Retrieve speed of lmcache (tokens per second)
+# TYPE lmcache:retrieve_speed histogram
+# HELP lmcache:store_speed Store speed of lmcache (tokens per second)
+# TYPE lmcache:store_speed histogram
+# HELP lmcache:p2p_time_to_transfer Time to transfer via P2P (seconds)
+# TYPE lmcache:p2p_time_to_transfer histogram
+# HELP lmcache:p2p_transfer_speed P2P transfer speed (tokens per second)
+# TYPE lmcache:p2p_transfer_speed histogram
+# HELP lmcache:remote_time_to_get Time to get from remote backends (ms)
+# TYPE lmcache:remote_time_to_get histogram
+# HELP lmcache:remote_time_to_put Time to put to remote backends (ms)
+# TYPE lmcache:remote_time_to_put histogram
+# HELP lmcache:remote_time_to_get_sync Time to get from remote backends synchronously(ms)
+# TYPE lmcache:remote_time_to_get_sync histogram
+# HELP lmcache:request_cache_hit_rate Request cache hit rate
+# TYPE lmcache:request_cache_hit_rate histogram
+# HELP lmcache:request_cache_lifespan Request cache lifespan in minutes
+# TYPE lmcache:request_cache_lifespan histogram
+# HELP lmcache:remote_ping_latency Latest ping latency to remote backends (ms)
+# TYPE lmcache:remote_ping_latency gauge
+lmcache:remote_ping_latency{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:remote_ping_errors_total Number of ping errors to remote backends
+# TYPE lmcache:remote_ping_errors_total counter
+lmcache:remote_ping_errors_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:remote_ping_errors_created Number of ping errors to remote backends
+# TYPE lmcache:remote_ping_errors_created gauge
+lmcache:remote_ping_errors_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987764268e+09
+# HELP lmcache:remote_ping_successes_total Number of ping successes to remote backends
+# TYPE lmcache:remote_ping_successes_total counter
+lmcache:remote_ping_successes_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:remote_ping_successes_created Number of ping successes to remote backends
+# TYPE lmcache:remote_ping_successes_created gauge
+lmcache:remote_ping_successes_created{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.7752653987764378e+09
+# HELP lmcache:remote_ping_error_code Latest ping error code to remote backends
+# TYPE lmcache:remote_ping_error_code gauge
+lmcache:remote_ping_error_code{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:local_cpu_hot_cache_count The size of the hot_cache
+# TYPE lmcache:local_cpu_hot_cache_count gauge
+lmcache:local_cpu_hot_cache_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 168.0
+# HELP lmcache:local_cpu_keys_in_request_count The size of the keys_in_request
+# TYPE lmcache:local_cpu_keys_in_request_count gauge
+lmcache:local_cpu_keys_in_request_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:kv_msg_queue_size The size of the KV message queue in BatchedMessageSender
+# TYPE lmcache:kv_msg_queue_size gauge
+lmcache:kv_msg_queue_size{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:remote_put_task_num The number of remote put tasks
+# TYPE lmcache:remote_put_task_num gauge
+lmcache:remote_put_task_num{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:pin_monitor_pinned_objects_count The number of pinned objects in PinMonitor
+# TYPE lmcache:pin_monitor_pinned_objects_count gauge
+lmcache:pin_monitor_pinned_objects_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:lmcache_is_healthy The health status of LMCache (1=healthy, 0=unhealthy)
+# TYPE lmcache:lmcache_is_healthy gauge
+lmcache:lmcache_is_healthy{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:get_blocking_failed_count The number of get blocking failed
+# TYPE lmcache:get_blocking_failed_count gauge
+lmcache:get_blocking_failed_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:put_failed_count The number of put failed
+# TYPE lmcache:put_failed_count gauge
+lmcache:put_failed_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:storage_events_ongoing_count The number of ongoing events
+# TYPE lmcache:storage_events_ongoing_count gauge
+lmcache:storage_events_ongoing_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:storage_events_done_count The number of done events
+# TYPE lmcache:storage_events_done_count gauge
+lmcache:storage_events_done_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:storage_events_not_found_count The number of not found events
+# TYPE lmcache:storage_events_not_found_count gauge
+lmcache:storage_events_not_found_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:chunk_statistics_enabled Whether chunk statistics collection is enabled
+# TYPE lmcache:chunk_statistics_enabled gauge
+lmcache:chunk_statistics_enabled{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:chunk_statistics_total_requests Total number of requests processed by chunk statistics
+# TYPE lmcache:chunk_statistics_total_requests gauge
+lmcache:chunk_statistics_total_requests{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 6.0
+# HELP lmcache:chunk_statistics_total_chunks Total number of chunks processed
+# TYPE lmcache:chunk_statistics_total_chunks gauge
+lmcache:chunk_statistics_total_chunks{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 18.0
+# HELP lmcache:chunk_statistics_unique_chunks Number of unique chunks (estimated)
+# TYPE lmcache:chunk_statistics_unique_chunks gauge
+lmcache:chunk_statistics_unique_chunks{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 18.0
+# HELP lmcache:chunk_statistics_reuse_rate Chunk reuse rate (0.0 to 1.0)
+# TYPE lmcache:chunk_statistics_reuse_rate gauge
+lmcache:chunk_statistics_reuse_rate{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:chunk_statistics_bloom_filter_size_mb Bloom Filter memory usage in MB
+# TYPE lmcache:chunk_statistics_bloom_filter_size_mb gauge
+lmcache:chunk_statistics_bloom_filter_size_mb{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:chunk_statistics_bloom_filter_fill_rate Bloom Filter fill rate (0.0 to 1.0)
+# TYPE lmcache:chunk_statistics_bloom_filter_fill_rate gauge
+lmcache:chunk_statistics_bloom_filter_fill_rate{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:chunk_statistics_file_count Number of files created for file_hash strategy
+# TYPE lmcache:chunk_statistics_file_count gauge
+lmcache:chunk_statistics_file_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:chunk_statistics_current_file_size Current file size in bytes for file_hash strategy
+# TYPE lmcache:chunk_statistics_current_file_size gauge
+lmcache:chunk_statistics_current_file_size{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1040.0
+# HELP lmcache:scheduler_unfinished_requests_count The count of scheduler unfinished requests count
+# TYPE lmcache:scheduler_unfinished_requests_count gauge
+lmcache:scheduler_unfinished_requests_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_load_specs_count The count of connector load specs count
+# TYPE lmcache:connector_load_specs_count gauge
+lmcache:connector_load_specs_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_request_trackers_count The count of connector request trackers count
+# TYPE lmcache:connector_request_trackers_count gauge
+lmcache:connector_request_trackers_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_kv_caches_count The count of connector kv caches count
+# TYPE lmcache:connector_kv_caches_count gauge
+lmcache:connector_kv_caches_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_layerwise_retrievers_count The count of connector layerwise retrievers count
+# TYPE lmcache:connector_layerwise_retrievers_count gauge
+lmcache:connector_layerwise_retrievers_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_invalid_block_ids_count The count of connector invalid block ids count
+# TYPE lmcache:connector_invalid_block_ids_count gauge
+lmcache:connector_invalid_block_ids_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:connector_requests_priority_count The count of connector requests priority count
+# TYPE lmcache:connector_requests_priority_count gauge
+lmcache:connector_requests_priority_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_total_count Total number of registered periodic threads
+# TYPE lmcache:periodic_threads_total_count gauge
+lmcache:periodic_threads_total_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 2.0
+# HELP lmcache:periodic_threads_running_count Number of running periodic threads
+# TYPE lmcache:periodic_threads_running_count gauge
+lmcache:periodic_threads_running_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_active_count Number of active periodic threads (recently executed)
+# TYPE lmcache:periodic_threads_active_count gauge
+lmcache:periodic_threads_active_count{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_critical_total Total number of critical level periodic threads
+# TYPE lmcache:periodic_threads_critical_total gauge
+lmcache:periodic_threads_critical_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_critical_running Number of running critical level periodic threads
+# TYPE lmcache:periodic_threads_critical_running gauge
+lmcache:periodic_threads_critical_running{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_critical_active Number of active critical level periodic threads
+# TYPE lmcache:periodic_threads_critical_active gauge
+lmcache:periodic_threads_critical_active{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_high_total Total number of high level periodic threads
+# TYPE lmcache:periodic_threads_high_total gauge
+lmcache:periodic_threads_high_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_high_running Number of running high level periodic threads
+# TYPE lmcache:periodic_threads_high_running gauge
+lmcache:periodic_threads_high_running{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_high_active Number of active high level periodic threads
+# TYPE lmcache:periodic_threads_high_active gauge
+lmcache:periodic_threads_high_active{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_medium_total Total number of medium level periodic threads
+# TYPE lmcache:periodic_threads_medium_total gauge
+lmcache:periodic_threads_medium_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_medium_running Number of running medium level periodic threads
+# TYPE lmcache:periodic_threads_medium_running gauge
+lmcache:periodic_threads_medium_running{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_medium_active Number of active medium level periodic threads
+# TYPE lmcache:periodic_threads_medium_active gauge
+lmcache:periodic_threads_medium_active{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_low_total Total number of low level periodic threads
+# TYPE lmcache:periodic_threads_low_total gauge
+lmcache:periodic_threads_low_total{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 1.0
+# HELP lmcache:periodic_threads_low_running Number of running low level periodic threads
+# TYPE lmcache:periodic_threads_low_running gauge
+lmcache:periodic_threads_low_running{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0
+# HELP lmcache:periodic_threads_low_active Number of active low level periodic threads
+# TYPE lmcache:periodic_threads_low_active gauge
+lmcache:periodic_threads_low_active{model_name="meta-llama/Llama-3.2-3B-Instruct",role="worker",served_model_name="meta-llama/Llama-3.2-3B-Instruct",worker_id="0"} 0.0

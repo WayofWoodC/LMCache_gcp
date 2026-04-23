@@ -1,3 +1,5 @@
+import inspect
+
 # SPDX-License-Identifier: Apache-2.0
 # Standard
 from typing import Any, Callable, Dict, Optional
@@ -180,14 +182,43 @@ def get_fused_rope(
         if "type" in rope_scaling:
             new_rope_params["rope_type"] = rope_scaling["type"]
 
-    rope = vllm_get_rope(
-        head_size=head_size,
-        max_position=max_position,
-        is_neox_style=is_neox_style,
-        rope_parameters=new_rope_params,
-        dtype=dtype,
-        dual_chunk_attention_config=None,
-    )
+    sig = inspect.signature(vllm_get_rope)
+    supported_params = sig.parameters
+
+    kwargs = {}
+
+    # Common arguments: only pass if supported by the installed vLLM
+    if "head_size" in supported_params:
+        kwargs["head_size"] = head_size
+    if "rotary_dim" in supported_params:
+        kwargs["rotary_dim"] = rotary_dim
+    if "max_position" in supported_params:
+        kwargs["max_position"] = max_position
+    if "is_neox_style" in supported_params:
+        kwargs["is_neox_style"] = is_neox_style
+    if "dtype" in supported_params:
+        kwargs["dtype"] = dtype
+
+    # Newer vLLM API
+    if "rope_parameters" in supported_params:
+        kwargs["rope_parameters"] = new_rope_params
+        if "dual_chunk_attention_config" in supported_params:
+            kwargs["dual_chunk_attention_config"] = None
+
+    # Older vLLM API fallback
+    else:
+        if "base" in supported_params:
+            kwargs["base"] = base
+        if "rope_theta" in supported_params:
+            kwargs["rope_theta"] = base
+        if "rope_scaling" in supported_params:
+            kwargs["rope_scaling"] = rope_scaling
+
+    # Optional debug line during troubleshooting
+    # print("DEBUG get_rope signature:", sig)
+    # print("DEBUG get_rope kwargs:", kwargs)
+
+    rope = vllm_get_rope(**kwargs)
 
     reverse_rope = BasicReverseRope(rope, rotary_dim, is_neox_style)
     fused_rope = FusedRope(rope, is_neox_style)
@@ -200,3 +231,60 @@ def get_fused_rope(
         return None
 
     return fused_rope
+
+# # Main interface
+# def get_fused_rope(
+#     head_size: int,
+#     rotary_dim: int,
+#     max_position: int,
+#     base: float,
+#     is_neox_style: bool = True,
+#     rope_scaling: Optional[Dict[str, Any]] = None,
+#     dtype: Optional[torch.dtype] = None,
+#     partial_rotary_factor: float = 1.0,
+# ) -> Optional[Callable[..., Any]]:
+#     # Validate the ROPE parameters
+#     if not validate_rope_params(
+#         head_size,
+#         rotary_dim,
+#         max_position,
+#         base,
+#         is_neox_style,
+#         rope_scaling,
+#         dtype,
+#         partial_rotary_factor,
+#     ):
+#         logger.warning(
+#             "The rope parameters is not supported! Cannot use cacheblend in this case"
+#         )
+#         return None
+
+#     new_rope_params = {
+#         "rope_theta": base,
+#         "partial_rotary_factor": partial_rotary_factor,
+#     }
+#     if rope_scaling is not None:
+#         new_rope_params.update(rope_scaling)
+#         if "type" in rope_scaling:
+#             new_rope_params["rope_type"] = rope_scaling["type"]
+
+#     rope = vllm_get_rope(
+#         head_size=head_size,
+#         max_position=max_position,
+#         is_neox_style=is_neox_style,
+#         rope_parameters=new_rope_params,
+#         dtype=dtype,
+#         dual_chunk_attention_config=None,
+#     )
+
+#     reverse_rope = BasicReverseRope(rope, rotary_dim, is_neox_style)
+#     fused_rope = FusedRope(rope, is_neox_style)
+
+#     correct = validate_reverse_correctness(rope, reverse_rope, fused_rope, head_size)
+#     if not correct:
+#         logger.error(
+#             "Fused/reverse rotary encoding is not correct! Will disable blending!"
+#         )
+#         return None
+
+#     return fused_rope

@@ -1,3 +1,10 @@
+from collections.abc import Mapping, Sequence
+
+try:
+    from vllm.v1.utils import ConstantList
+except Exception:
+    ConstantList = None
+
 # SPDX-License-Identifier: Apache-2.0
 """ZMQ-based transport implementations for RPC communication.
 
@@ -105,7 +112,8 @@ class ZmqReqRepClientTransport(RpcClientTransport):
         sending. On timeout or ZMQ error, recreates all
         sockets and returns an empty list.
         """
-        encoded = [self.encoder.encode(m) for m in msg]
+        #encoded = [self.encoder.encode(m) for m in msg]
+        encoded = [self.encoder.encode(_normalize_for_encoding(m)) for m in msg]
         results: list[bytes] = []
         failed_rank = -1
         try:
@@ -211,3 +219,19 @@ class ZmqRouterServerTransport(RpcServerTransport):
 
     def close(self) -> None:
         self.socket.close(linger=0)
+
+
+def _normalize_for_encoding(obj):
+    if ConstantList is not None and isinstance(obj, ConstantList):
+        return [_normalize_for_encoding(x) for x in obj]
+
+    if isinstance(obj, tuple):
+        return tuple(_normalize_for_encoding(x) for x in obj)
+
+    if isinstance(obj, list):
+        return [_normalize_for_encoding(x) for x in obj]
+
+    if isinstance(obj, dict):
+        return {k: _normalize_for_encoding(v) for k, v in obj.items()}
+
+    return obj

@@ -1,0 +1,30 @@
+{
+  "request_name": "R3",
+  "request_chunk_hashes": [
+    "0x288cb0660c84afe",
+    "0x536b20d822924bd6",
+    "0xbe111a90805e1c2b",
+    "0xbf1949d75602d333"
+  ],
+  "new_chunk_hashes": [
+    "0x288cb0660c84afe",
+    "0x536b20d822924bd6",
+    "0xbe111a90805e1c2b",
+    "0xbf1949d75602d333"
+  ],
+  "hit_chunk_hashes": [],
+  "appended_records_count": 1,
+  "segment_observation": {
+    "segment_hashes": [
+      "0xd6908d4d2eaccc3c"
+    ],
+    "segment_new_hashes": [
+      "0xd6908d4d2eaccc3c"
+    ],
+    "segment_hit_hashes": [],
+    "segment_separator_token_ids": [
+      2,
+      674
+    ]
+  }
+}

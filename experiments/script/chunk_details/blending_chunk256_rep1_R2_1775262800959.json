@@ -1,0 +1,36 @@
+{
+  "request_name": "R2",
+  "request_chunk_hashes": [
+    "0x1c06efb11e2f027d",
+    "0x9e36ca49ec93102a",
+    "0xd0cd1a288c5fdb62",
+    "0xde4a04d8d6faf5b9"
+  ],
+  "new_chunk_hashes": [
+    "0x1c06efb11e2f027d",
+    "0x9e36ca49ec93102a",
+    "0xd0cd1a288c5fdb62",
+    "0xde4a04d8d6faf5b9"
+  ],
+  "hit_chunk_hashes": [],
+  "appended_records_count": 1,
+  "segment_observation": {
+    "segment_hashes": [
+      "0x15dc2930c825407b",
+      "0xb775c6853ef5770d",
+      "0x3ec7f86ec5d80b6f"
+    ],
+    "segment_new_hashes": [
+      "0x15dc2930c825407b",
+      "0x3ec7f86ec5d80b6f"
+    ],
+    "segment_hit_hashes": [
+      "0xb775c6853ef5770d"
+    ],
+    "segment_separator_token_ids": [
+      674,
+      674,
+      220
+    ]
+  }
+}

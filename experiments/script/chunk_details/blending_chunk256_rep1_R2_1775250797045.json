@@ -1,0 +1,15 @@
+{
+  "request_name": "R2",
+  "request_chunk_hashes": [
+    "0x14db36a603327ade",
+    "0x4383c46551bb6d71",
+    "0xc714a989a2d6dce9"
+  ],
+  "new_chunk_hashes": [
+    "0x14db36a603327ade",
+    "0x4383c46551bb6d71",
+    "0xc714a989a2d6dce9"
+  ],
+  "hit_chunk_hashes": [],
+  "appended_records_count": 1
+}

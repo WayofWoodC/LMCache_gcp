@@ -1,0 +1,11 @@
+{
+  "request_name": "R3",
+  "request_chunk_hashes": [
+    "0x86211645355c897"
+  ],
+  "new_chunk_hashes": [
+    "0x86211645355c897"
+  ],
+  "hit_chunk_hashes": [],
+  "appended_records_count": 1
+}
