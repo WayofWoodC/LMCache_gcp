@@ -688,24 +688,114 @@ def export_request_kv_to_plain(worker_impl: object, num_tokens: int) -> torch.Te
     slot_mapping = build_slot_mapping_from_tracker_or_linear(worker_impl, num_tokens, dev)
 
     shape = gpu_connector.get_shape(num_tokens)
-    if len(shape) != 4 or shape[0] != 2:
-        raise RuntimeError(f"Expected non-MLA KV shape [2,L,T,D], got {tuple(shape)}")
+    engine_fmt = getattr(lmcache_engine, "fmt", None)
 
-    plain_kv = torch.empty(shape, dtype=kv_caches[0].dtype, device=dev)
+    def _infer_layerwise_fmt() -> MemoryFormat:
+        if len(shape) != 3:
+            raise RuntimeError(f"Expected layerwise 3D shape, got {tuple(shape)}")
+        # Layerwise connectors expose either [2, T, D] or [T, 2, D].
+        if shape[0] == 2:
+            return MemoryFormat.KV_2TD
+        if shape[1] == 2:
+            return MemoryFormat.KV_T2D
+        if engine_fmt in (MemoryFormat.KV_2TD, MemoryFormat.KV_T2D):
+            return engine_fmt
+        raise RuntimeError(
+            "Expected non-MLA layerwise shape [2,T,D] or [T,2,D], "
+            f"got {tuple(shape)}"
+        )
 
-    mem_obj = SimpleNamespace(
-        tensor=plain_kv,
-        metadata=SimpleNamespace(fmt=MemoryFormat.KV_2LTD),
-    )
+    def _export_via_batched_from_gpu(layer_fmt: MemoryFormat) -> torch.Tensor:
+        num_layers = int(
+            getattr(lmcache_engine, "num_layers", 0)
+            or getattr(gpu_connector, "num_layers", 0)
+        )
+        if num_layers <= 0:
+            raise RuntimeError(
+                "Cannot determine num_layers for batched_from_gpu export "
+                f"(engine={getattr(lmcache_engine, 'num_layers', None)}, "
+                f"connector={getattr(gpu_connector, 'num_layers', None)})"
+            )
 
-    gpu_connector.from_gpu(
-        mem_obj,
-        0,
-        num_tokens,
-        kvcaches=kv_caches,
-        slot_mapping=slot_mapping,
-    )
-    torch.cuda.synchronize(dev)
+        hidden_dim = int(shape[2])
+        if layer_fmt == MemoryFormat.KV_2TD:
+            layer_buffers = [
+                torch.empty((2, num_tokens, hidden_dim), dtype=kv_caches[0].dtype, device=dev)
+                for _ in range(num_layers)
+            ]
+        elif layer_fmt == MemoryFormat.KV_T2D:
+            layer_buffers = [
+                torch.empty((num_tokens, 2, hidden_dim), dtype=kv_caches[0].dtype, device=dev)
+                for _ in range(num_layers)
+            ]
+        else:
+            raise RuntimeError(f"Unsupported layerwise format for export: {layer_fmt}")
+
+        layer_memory_objs = [
+            [SimpleNamespace(tensor=buf, metadata=SimpleNamespace(fmt=layer_fmt))]
+            for buf in layer_buffers
+        ]
+
+        batched_ret = gpu_connector.batched_from_gpu(
+            layer_memory_objs,
+            [0],
+            [num_tokens],
+            kvcaches=kv_caches,
+            slot_mapping=slot_mapping,
+            sync=True,
+        )
+        if batched_ret is not None:
+            for _ in batched_ret:
+                pass
+
+        # CB server expects a single contiguous plain tensor [2, L, T, D].
+        merged = torch.empty(
+            (2, num_layers, num_tokens, hidden_dim),
+            dtype=kv_caches[0].dtype,
+            device=dev,
+        )
+        for layer_id, buf in enumerate(layer_buffers):
+            if layer_fmt == MemoryFormat.KV_2TD:
+                merged[:, layer_id].copy_(buf, non_blocking=True)
+            else:  # KV_T2D
+                merged[:, layer_id].copy_(buf.permute(1, 0, 2), non_blocking=True)
+        return merged
+
+    if len(shape) == 4:
+        # [2, L, T, D]
+        if shape[0] != 2:
+            raise RuntimeError(
+                "Expected non-MLA KV shape [2,L,T,D], "
+                f"got {tuple(shape)} (shape[0] must be 2)"
+            )
+        plain_kv = torch.empty(shape, dtype=kv_caches[0].dtype, device=dev)
+        mem_obj = SimpleNamespace(
+            tensor=plain_kv,
+            metadata=SimpleNamespace(fmt=MemoryFormat.KV_2LTD),
+        )
+        try:
+            gpu_connector.from_gpu(
+                mem_obj,
+                0,
+                num_tokens,
+                kvcaches=kv_caches,
+                slot_mapping=slot_mapping,
+            )
+        except NotImplementedError:
+            # Some layerwise connectors only support batched_from_gpu.
+            plain_kv = _export_via_batched_from_gpu(
+                engine_fmt if engine_fmt in (MemoryFormat.KV_2TD, MemoryFormat.KV_T2D) else MemoryFormat.KV_2TD
+            )
+    elif len(shape) == 3:
+        plain_kv = _export_via_batched_from_gpu(_infer_layerwise_fmt())
+    else:
+        raise RuntimeError(
+            "Expected non-MLA KV shape [2,L,T,D], [2,T,D], or [T,2,D], "
+            f"got {tuple(shape)}"
+        )
+
+    if dev.type == "cuda":
+        torch.cuda.synchronize(dev)
     return plain_kv
 
 

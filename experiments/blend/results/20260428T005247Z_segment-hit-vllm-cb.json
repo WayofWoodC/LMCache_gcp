@@ -1,0 +1,42 @@
+[
+  {
+    "request": "r1",
+    "hits": 0,
+    "hit_tokens": 0,
+    "lookup_ms": 2.1925479997880757,
+    "retrieve_ms": 0.0,
+    "segment_summary": "none"
+  },
+  {
+    "request": "r2",
+    "hits": 0,
+    "hit_tokens": 0,
+    "lookup_ms": 2.021875999867916,
+    "retrieve_ms": 0.0,
+    "segment_summary": "none"
+  },
+  {
+    "request": "r3",
+    "hits": 0,
+    "hit_tokens": 0,
+    "lookup_ms": 1.6290310001932085,
+    "retrieve_ms": 0.0,
+    "segment_summary": "none"
+  },
+  {
+    "request": "r4",
+    "hits": 0,
+    "hit_tokens": 0,
+    "lookup_ms": 1.7089140000753105,
+    "retrieve_ms": 0.0,
+    "segment_summary": "none"
+  },
+  {
+    "request": "r5",
+    "hits": 0,
+    "hit_tokens": 0,
+    "lookup_ms": 1.4209570004604757,
+    "retrieve_ms": 0.0,
+    "segment_summary": "none"
+  }
+]
