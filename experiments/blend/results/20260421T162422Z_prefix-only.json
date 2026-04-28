@@ -1,0 +1,59 @@
+{
+  "mode": "prefix-only",
+  "model": "meta-llama/Llama-3.2-3B-Instruct",
+  "chunk_size": "256",
+  "blending_enabled": false,
+  "use_disk": false,
+  "enable_sparse": false,
+  "blend_special_str": "# #",
+  "request_order": [
+    "warmup",
+    "r1",
+    "r2",
+    "r3",
+    "r4",
+    "r5"
+  ],
+  "rows": [
+    {
+      "request": "warmup",
+      "prompt_tokens": 2500,
+      "latency_s": 0.3940170619998753,
+      "generated_text": " Nice"
+    },
+    {
+      "request": "r1",
+      "prompt_tokens": 10027,
+      "latency_s": 1.4078086800000165,
+      "generated_text": " ["
+    },
+    {
+      "request": "r2",
+      "prompt_tokens": 10027,
+      "latency_s": 1.4188708049998695,
+      "generated_text": " ["
+    },
+    {
+      "request": "r3",
+      "prompt_tokens": 10027,
+      "latency_s": 0.061253136000004815,
+      "generated_text": " ["
+    },
+    {
+      "request": "r4",
+      "prompt_tokens": 10527,
+      "latency_s": 1.4988330310000038,
+      "generated_text": " John"
+    },
+    {
+      "request": "r5",
+      "prompt_tokens": 9527,
+      "latency_s": 0.5677992210000866,
+      "generated_text": " ["
+    }
+  ],
+  "totals": {
+    "total_latency_s_all": 5.3485819349998565,
+    "total_latency_s_r1_to_r5": 4.954564872999981
+  }
+}

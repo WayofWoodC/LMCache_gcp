@@ -1,0 +1,15 @@
+{
+  "request_name": "R3",
+  "request_chunk_hashes": [
+    "0x3f36b10e4cddc88a",
+    "0x475fbc356d1eef25",
+    "0x7e1d7c49d7a3121a"
+  ],
+  "new_chunk_hashes": [
+    "0x3f36b10e4cddc88a",
+    "0x475fbc356d1eef25",
+    "0x7e1d7c49d7a3121a"
+  ],
+  "hit_chunk_hashes": [],
+  "appended_records_count": 1
+}

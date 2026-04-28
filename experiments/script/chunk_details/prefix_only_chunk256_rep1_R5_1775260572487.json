@@ -1,0 +1,31 @@
+{
+  "request_name": "R5",
+  "request_chunk_hashes": [
+    "0x1aa646c4c26f6dc3",
+    "0x3182b74f665938c7",
+    "0xa307b4dcb92b2fd6",
+    "0xf2e544b8362aed71"
+  ],
+  "new_chunk_hashes": [
+    "0x1aa646c4c26f6dc3",
+    "0x3182b74f665938c7",
+    "0xf2e544b8362aed71"
+  ],
+  "hit_chunk_hashes": [
+    "0xa307b4dcb92b2fd6"
+  ],
+  "appended_records_count": 1,
+  "segment_observation": {
+    "segment_hashes": [
+      "0xcce9edf200660b14"
+    ],
+    "segment_new_hashes": [
+      "0xcce9edf200660b14"
+    ],
+    "segment_hit_hashes": [],
+    "segment_separator_token_ids": [
+      2,
+      674
+    ]
+  }
+}
