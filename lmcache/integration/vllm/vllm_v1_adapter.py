@@ -58,6 +58,13 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 
+def _parse_env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 @dataclass
 class LoadSpec:
     # Number of tokens cached in vLLM
@@ -562,7 +569,7 @@ class LMCacheConnectorV1Impl:
         )
         self.current_layer = 0
 
-        self.force_skip_save = bool(os.environ.get("LMCACHE_FORCE_SKIP_SAVE", False))
+        self.force_skip_save = _parse_env_bool("LMCACHE_FORCE_SKIP_SAVE", False)
         self._requests_priority: dict[str, int] = {}
         self._invalid_block_ids: set[int] = set()
 

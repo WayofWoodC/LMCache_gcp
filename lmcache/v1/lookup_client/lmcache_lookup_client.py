@@ -89,6 +89,11 @@ class LMCacheLookupClient(LookupClientInterface):
         lookup_id: str,
         request_configs: Optional[dict] = None,
     ) -> Optional[int]:
+        # vLLM may provide token_ids as ConstantList (or other sequence-like
+        # containers). Normalize to a plain list so RPC encoder can serialize it.
+        if not isinstance(token_ids, (torch.Tensor, list)):
+            token_ids = list(token_ids)
+
         request_configs_str = ""
         if request_configs is not None and len(request_configs) != 0:
             request_configs_str = json.dumps(request_configs)

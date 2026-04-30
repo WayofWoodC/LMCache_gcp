@@ -19,7 +19,7 @@ Modes:
    - warmup -> r1 -> r2 -> r3 -> r4 -> r5
    - prints LMCache lookup/retrieve/store timings and hit tokens.
 
-2) Optional blend-server CB verification (--cb-verify)
+2) Optional blend-server CB verification (--cb-verify, V2 by default)
    - after r1, export r1 KV from vLLM paged buffer
    - register KV buffer to blend server
    - store c1/c2/c3 from r1 offsets with CB_STORE_PRE_COMPUTED
@@ -30,7 +30,13 @@ Examples:
   python segment_hit_vllm.py --model meta-llama/Llama-3.2-3B-Instruct
 
 - Start local blend server and run CB verification too:
-  python segment_hit_vllm.py --start-server --cb-verify
+  python segment_hit_vllm.py --start-server --cb-verify --server-backend v2
+
+Recommended for quick/stable runs on current blend-server-v2:
+  python segment_hit_vllm.py --start-server --cb-verify \
+      --server-backend v2 \
+      --segment-chunks 2 --warmup-chunks 2 \
+      --max-model-len 4096
 """
 
 from __future__ import annotations
@@ -47,7 +53,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Iterable, Literal
+from typing import Any, Iterable, Literal
 
 import torch
 import zmq
@@ -63,7 +69,7 @@ from lmcache.v1.distributed.config import (
     StorageManagerConfig,
 )
 from lmcache.v1.memory_management import MemoryFormat
-from lmcache.v1.mp_observability.config import DEFAULT_PROMETHEUS_CONFIG
+from lmcache.v1.mp_observability.config import DEFAULT_OBSERVABILITY_CONFIG
 from lmcache.v1.multiprocess.custom_types import CudaIPCWrapper, IPCCacheEngineKey, KVCache
 from lmcache.v1.multiprocess.mq import MessageQueueClient
 from lmcache.v1.multiprocess.protocol import RequestType, get_response_class
@@ -72,8 +78,8 @@ from lmcache.v1.multiprocess.protocol import RequestType, get_response_class
 REQUEST_ORDER = ["warmup", "r1", "r2", "r3", "r4", "r5"]
 CB_LOOKUP_ORDER = ["r1", "r2", "r3", "r4", "r5"]
 _CAPTURED_CONNECTORS: list[object] = []
-CBProtocol = Literal["v1", "v2"]
-ServerBackend = Literal["blend_v1", "blend_v2"]
+CBProtocol = Literal["v2"]
+ServerBackend = Literal["blend_v2"]
 
 RequestName = str
 SegmentRange = tuple[str, int, int]
@@ -123,6 +129,35 @@ def now_ms() -> float:
     return time.perf_counter() * 1000.0
 
 
+def to_python_value(value: Any) -> Any:
+    """Convert torch/numpy-like scalars and containers to JSON-safe Python values."""
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 1:
+            return to_python_value(value.item())
+        return [to_python_value(v) for v in value.detach().cpu().flatten().tolist()]
+    if isinstance(value, dict):
+        return {str(k): to_python_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [to_python_value(v) for v in value]
+    if isinstance(value, tuple):
+        return [to_python_value(v) for v in value]
+    if isinstance(value, (int, float, str, bool)) or value is None:
+        return value
+    # Fallback for scalar-like objects (e.g. numpy scalars) exposing item().
+    item = getattr(value, "item", None)
+    if callable(item):
+        return to_python_value(item())
+    return str(value)
+
+
+def to_int(value: Any) -> int:
+    return int(to_python_value(value))
+
+
+def to_float(value: Any) -> float:
+    return float(to_python_value(value))
+
+
 def configure_multiprocessing_for_vllm() -> None:
     # Keep EngineCore in-process so LMCache stats are visible in this process.
     os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
@@ -147,7 +182,8 @@ def setup_environment_variables(
     os.environ["LMCACHE_BLEND_RECOMPUTE_RATIOS"] = blend_recompute_ratios
 
     # For this experiment, we want stores enabled so later requests can hit.
-    os.environ["LMCACHE_FORCE_SKIP_SAVE"] = "False"
+    # Use "0" to avoid ambiguous bool("False") parsing in some call paths.
+    os.environ["LMCACHE_FORCE_SKIP_SAVE"] = "0"
 
     os.environ.setdefault("PYTHONHASHSEED", "0")
     os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
@@ -184,7 +220,11 @@ def install_connector_probe() -> None:
 
 
 @contextlib.contextmanager
-def build_llm_with_lmcache(model: str):
+def build_llm_with_lmcache(
+    model: str,
+    max_model_len: int,
+    gpu_memory_utilization: float,
+):
     from vllm import LLM
     from vllm.config import KVTransferConfig
     from vllm.engine.arg_utils import EngineArgs
@@ -197,8 +237,8 @@ def build_llm_with_lmcache(model: str):
     llm_args = EngineArgs(
         model=model,
         kv_transfer_config=ktc,
-        max_model_len=12000,
-        gpu_memory_utilization=0.8,
+        max_model_len=max_model_len,
+        gpu_memory_utilization=gpu_memory_utilization,
         # Keep LMCache blending active, disable APC for a cleaner experiment.
         enable_prefix_caching=False,
         enforce_eager=True,
@@ -226,21 +266,14 @@ def get_worker_connector_impl() -> object:
 
 
 def choose_server_backend(server_backend: str) -> tuple[ServerBackend, str | None]:
-    if server_backend == "v1":
-        return "blend_v1", None
-    if server_backend == "v2":
-        from lmcache.v1.multiprocess import blend_server_v2  # noqa: F401
+    if server_backend not in ("auto", "v2"):
+        raise ValueError(
+            "This repo version supports only blend_server_v2. "
+            f"Got --server-backend={server_backend!r}."
+        )
+    from lmcache.v1.multiprocess import blend_server_v2  # noqa: F401
 
-        return "blend_v2", None
-    if server_backend != "auto":
-        raise ValueError(f"Unknown server backend: {server_backend}")
-
-    try:
-        from lmcache.v1.multiprocess import blend_server_v2  # noqa: F401
-
-        return "blend_v2", None
-    except Exception as e:
-        return "blend_v1", f"{type(e).__name__}: {e}"
+    return "blend_v2", None
 
 
 def server_process_runner(
@@ -250,6 +283,31 @@ def server_process_runner(
     cpu_buffer_size_gb: float,
     backend: ServerBackend,
 ) -> None:
+    if backend != "blend_v2":
+        raise RuntimeError(f"Unsupported backend in current repo: {backend}")
+
+    from lmcache.v1.multiprocess.blend_server_v2 import run_cache_server
+    from lmcache.v1.multiprocess.config import MPServerConfig
+
+    mp_cfg_fields = set(inspect.signature(MPServerConfig).parameters)
+    mp_kwargs: dict[str, object] = {
+        "host": host,
+        "port": port,
+        "chunk_size": chunk_size,
+    }
+    if "engine_type" in mp_cfg_fields:
+        mp_kwargs["engine_type"] = "blend"
+    if "max_workers" in mp_cfg_fields:
+        mp_kwargs["max_workers"] = 1
+    if "max_gpu_workers" in mp_cfg_fields:
+        mp_kwargs["max_gpu_workers"] = 1
+    if "max_cpu_workers" in mp_cfg_fields:
+        mp_kwargs["max_cpu_workers"] = 1
+    if "hash_algorithm" in mp_cfg_fields:
+        mp_kwargs["hash_algorithm"] = "blake3"
+
+    mp_config = MPServerConfig(**mp_kwargs)
+
     storage_manager_config = StorageManagerConfig(
         l1_manager_config=L1ManagerConfig(
             memory_config=L1MemoryManagerConfig(
@@ -259,139 +317,21 @@ def server_process_runner(
         ),
         eviction_config=EvictionConfig(eviction_policy="LRU"),
     )
-
-    if backend == "blend_v1":
-        from lmcache.v1.multiprocess import blend_server
-        from lmcache.v1.multiprocess.config import MPServerConfig
-
-        run_cache_server = blend_server.run_cache_server
-        param_names = set(inspect.signature(run_cache_server).parameters)
-
-        # Legacy API.
-        if {
-            "storage_manager_config",
-            "prometheus_config",
-            "host",
-            "port",
-            "chunk_size",
-        }.issubset(param_names):
-            run_cache_server(
-                storage_manager_config=storage_manager_config,
-                prometheus_config=DEFAULT_PROMETHEUS_CONFIG,
-                host=host,
-                port=port,
-                chunk_size=chunk_size,
-            )
-            return
-
-        # Newer API with MPServerConfig.
-        if {"mp_config", "storage_manager_config", "prometheus_config"}.issubset(
-            param_names
-        ):
-            mp_cfg_fields = set(inspect.signature(MPServerConfig).parameters)
-            mp_kwargs: dict[str, object] = {
-                "host": host,
-                "port": port,
-                "chunk_size": chunk_size,
-            }
-            if "max_workers" in mp_cfg_fields:
-                mp_kwargs["max_workers"] = 1
-            if "hash_algorithm" in mp_cfg_fields:
-                mp_kwargs["hash_algorithm"] = "blake3"
-
-            mp_config = MPServerConfig(**mp_kwargs)
-
-            kwargs: dict[str, object] = {
-                "mp_config": mp_config,
-                "storage_manager_config": storage_manager_config,
-                "prometheus_config": DEFAULT_PROMETHEUS_CONFIG,
-            }
-            if "telemetry_config" in param_names:
-                try:
-                    from lmcache.v1.mp_observability.telemetry.config import (
-                        DEFAULT_TELEMETRY_CONFIG,
-                    )
-
-                    kwargs["telemetry_config"] = DEFAULT_TELEMETRY_CONFIG
-                except Exception:
-                    pass
-
-            run_cache_server(**kwargs)
-            return
-
-        raise RuntimeError(
-            "Unsupported blend_server.run_cache_server signature: "
-            f"{sorted(param_names)}"
-        )
-
-    from lmcache.v1.multiprocess import blend_server_v2
-
-    run_cache_server = blend_server_v2.run_cache_server
-    param_names = set(inspect.signature(run_cache_server).parameters)
-
-    # Compatible with old-style v2 API used in tests:
-    # run_cache_server(storage_manager_config, prometheus_config, host, port, chunk_size, ...)
-    if {
-        "storage_manager_config",
-        "prometheus_config",
-        "host",
-        "port",
-        "chunk_size",
-    }.issubset(param_names):
-        run_cache_server(
-            storage_manager_config=storage_manager_config,
-            prometheus_config=DEFAULT_PROMETHEUS_CONFIG,
-            host=host,
-            port=port,
-            chunk_size=chunk_size,
-        )
-        return
-
-    # Compatible with newer v2 API:
-    # run_cache_server(mp_config, storage_manager_config, obs_config, ...)
-    if {"mp_config", "storage_manager_config", "obs_config"}.issubset(param_names):
-        from lmcache.v1.multiprocess.config import MPServerConfig
-
-        mp_cfg_fields = set(inspect.signature(MPServerConfig).parameters)
-        mp_kwargs: dict[str, object] = {
-            "host": host,
-            "port": port,
-            "chunk_size": chunk_size,
-        }
-        if "max_workers" in mp_cfg_fields:
-            mp_kwargs["max_workers"] = 1
-        if "max_gpu_workers" in mp_cfg_fields:
-            mp_kwargs["max_gpu_workers"] = 1
-        if "max_cpu_workers" in mp_cfg_fields:
-            mp_kwargs["max_cpu_workers"] = 1
-        if "hash_algorithm" in mp_cfg_fields:
-            mp_kwargs["hash_algorithm"] = "blake3"
-
-        mp_config = MPServerConfig(**mp_kwargs)
-
-        obs_config = DEFAULT_PROMETHEUS_CONFIG
-        try:
-            # Available in newer observability API.
-            from lmcache.v1.mp_observability.config import DEFAULT_OBSERVABILITY_CONFIG
-
-            obs_config = DEFAULT_OBSERVABILITY_CONFIG
-        except Exception:
-            pass
-
-        run_cache_server(
-            mp_config=mp_config,
-            storage_manager_config=storage_manager_config,
-            obs_config=obs_config,
-        )
-        return
-
-    raise RuntimeError(
-        "Unsupported blend_server_v2.run_cache_server signature: "
-        f"{sorted(param_names)}"
+    run_cache_server(
+        mp_config=mp_config,
+        storage_manager_config=storage_manager_config,
+        obs_config=DEFAULT_OBSERVABILITY_CONFIG,
     )
 
 
-def build_prompt_pack(tokenizer: AutoTokenizer, blend_special_str: str) -> PromptPack:
+def build_prompt_pack(
+    tokenizer: AutoTokenizer,
+    blend_special_str: str,
+    *,
+    chunk_size: int,
+    segment_chunks: int,
+    warmup_chunks: int,
+) -> PromptPack:
     def enc(text: str) -> list[int]:
         return tokenizer.encode(text, add_special_tokens=False)
 
@@ -403,13 +343,27 @@ def build_prompt_pack(tokenizer: AutoTokenizer, blend_special_str: str) -> Promp
     )
     sys_prompt = enc(system_text)
 
-    c1 = enc(("Hello, how are you? " * 500).strip())
-    c2 = enc(("Hello, what's up? " * 500).strip())
-    c3 = enc(("Hi, what are you up to? " * 500).strip())
-    c4 = enc(("Hello, how is it going? " * 500).strip())
-    c5 = enc(("Hi, nice to meet you! " * 500).strip())
+    per_segment_tokens = max(chunk_size, chunk_size * max(1, segment_chunks))
+    warmup_tokens = max(chunk_size, chunk_size * max(1, warmup_chunks))
 
-    warmup_prompt = enc(("Nice to meet you. " * 500).strip())
+    def make_chunk_aligned_segment(seed_text: str, target_tokens: int) -> list[int]:
+        seed = enc(seed_text)
+        if not seed:
+            # Extremely defensive fallback for tokenizers that may return [] on short text.
+            fallback_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else 1
+            seed = [int(fallback_id)]
+        out: list[int] = []
+        while len(out) < target_tokens:
+            out.extend(seed)
+        return out[:target_tokens]
+
+    c1 = make_chunk_aligned_segment("Hello, how are you?", per_segment_tokens)
+    c2 = make_chunk_aligned_segment("Hello, what's up?", per_segment_tokens)
+    c3 = make_chunk_aligned_segment("Hi, what are you up to?", per_segment_tokens)
+    c4 = make_chunk_aligned_segment("Hello, how is it going?", per_segment_tokens)
+    c5 = make_chunk_aligned_segment("Hi, nice to meet you!", per_segment_tokens)
+
+    warmup_prompt = make_chunk_aligned_segment("This is just a warmup message.", warmup_tokens)
     tail = enc("Hello, my name is")
 
     def join_segments(segments: list[tuple[str, list[int]]]) -> tuple[list[int], list[SegmentRange]]:
@@ -484,17 +438,17 @@ def collect_request_metrics(
     return RequestMetrics(
         phase=phase,
         request=request_name,
-        prompt_tokens=prompt_tokens,
-        request_ms=request_ms,
-        lookup_ms=sum(stat.time_to_lookup() for stat in lookup_stats) * 1000.0,
-        retrieve_ms=sum(stat.time_to_retrieve() for stat in retrieve_stats) * 1000.0,
-        store_ms=sum(stat.time_to_store() for stat in store_stats) * 1000.0,
-        lookup_hit_tokens=sum(stat.hit_tokens for stat in lookup_stats),
-        retrieve_hit_tokens=sum(stat.local_hit_tokens for stat in retrieve_stats),
-        store_tokens=sum(stat.num_tokens for stat in store_stats),
-        lookup_events=len(lookup_stats),
-        retrieve_events=len(retrieve_stats),
-        store_events=len(store_stats),
+        prompt_tokens=to_int(prompt_tokens),
+        request_ms=to_float(request_ms),
+        lookup_ms=to_float(sum(stat.time_to_lookup() for stat in lookup_stats) * 1000.0),
+        retrieve_ms=to_float(sum(stat.time_to_retrieve() for stat in retrieve_stats) * 1000.0),
+        store_ms=to_float(sum(stat.time_to_store() for stat in store_stats) * 1000.0),
+        lookup_hit_tokens=to_int(sum(stat.hit_tokens for stat in lookup_stats)),
+        retrieve_hit_tokens=to_int(sum(stat.local_hit_tokens for stat in retrieve_stats)),
+        store_tokens=to_int(sum(stat.num_tokens for stat in store_stats)),
+        lookup_events=to_int(len(lookup_stats)),
+        retrieve_events=to_int(len(retrieve_stats)),
+        store_events=to_int(len(store_stats)),
     )
 
 
@@ -876,122 +830,65 @@ def run_cb_segment_verification(
             )
 
             retrieve_ms = 0.0
+            t0 = now_ms()
+            matches = client.submit_request(
+                RequestType.CB_LOOKUP_PRE_COMPUTED_V2,
+                [key],
+                get_response_class(RequestType.CB_LOOKUP_PRE_COMPUTED_V2),
+            ).result(timeout=30)
+            t1 = now_ms()
 
-            if cb_protocol == "v2":
-                t0 = now_ms()
-                matches = client.submit_request(
-                    RequestType.CB_LOOKUP_PRE_COMPUTED_V2,
-                    [key],
-                    get_response_class(RequestType.CB_LOOKUP_PRE_COMPUTED_V2),
-                ).result(timeout=30)
-                t1 = now_ms()
+            lookup_ms = t1 - t0
+            matches_sorted = sorted(matches, key=lambda m: m.cur_st)
+            hits = len(matches_sorted)
+            hit_tokens = sum((m.cur_ed - m.cur_st) for m in matches_sorted)
+            seg_summary = summarize_segments(
+                matches_sorted, prompt_pack.segment_ranges[req_name]
+            )
 
-                lookup_ms = t1 - t0
-                matches_sorted = sorted(matches, key=lambda m: m.cur_st)
-                hits = len(matches_sorted)
-                hit_tokens = sum((m.cur_ed - m.cur_st) for m in matches_sorted)
-                seg_summary = summarize_segments(
-                    matches_sorted, prompt_pack.segment_ranges[req_name]
+            print(
+                f"[cb][lookup][{req_name}] protocol={cb_protocol} hits={hits} "
+                f"hit_tokens={hit_tokens} latency_ms={lookup_ms:.3f} "
+                f"segments={seg_summary}"
+            )
+            for m in matches_sorted[: args.max_match_rows]:
+                seg = locate_segment(
+                    prompt_pack.segment_ranges[req_name], m.cur_st, m.cur_ed
                 )
-
                 print(
-                    f"[cb][lookup][{req_name}] protocol=v2 hits={hits} "
-                    f"hit_tokens={hit_tokens} latency_ms={lookup_ms:.3f} "
-                    f"segments={seg_summary}"
+                    f"  cur=[{m.cur_st},{m.cur_ed}) seg={seg:<6} "
+                    f"old=[{m.old_st},{m.old_ed}) hash={m.hash.hex()[:16]}..."
                 )
-                for m in matches_sorted[: args.max_match_rows]:
-                    seg = locate_segment(
-                        prompt_pack.segment_ranges[req_name], m.cur_st, m.cur_ed
-                    )
-                    print(
-                        f"  cur=[{m.cur_st},{m.cur_ed}) seg={seg:<6} "
-                        f"old=[{m.old_st},{m.old_ed}) hash={m.hash.hex()[:16]}..."
-                    )
-                if len(matches_sorted) > args.max_match_rows:
-                    print(f"  ... and {len(matches_sorted) - args.max_match_rows} more")
+            if len(matches_sorted) > args.max_match_rows:
+                print(f"  ... and {len(matches_sorted) - args.max_match_rows} more")
 
-                if args.cb_retrieve_after_lookup:
-                    event2 = torch.cuda.Event(interprocess=True)
-                    event2.record()
+            if args.cb_retrieve_after_lookup:
+                event2 = torch.cuda.Event(interprocess=True)
+                event2.record()
 
-                    t2 = now_ms()
-                    ok2 = (
-                        client.submit_request(
-                            RequestType.CB_RETRIEVE_PRE_COMPUTED_V2,
-                            [
-                                key,
-                                matches_sorted,
-                                args.cb_retrieve_offset,
-                                instance_id,
-                                event2.ipc_handle(),
-                            ],
-                            get_response_class(RequestType.CB_RETRIEVE_PRE_COMPUTED_V2),
-                        )
-                        .to_cuda_future()
-                        .result(timeout=40)
+                t2 = now_ms()
+                ok2 = (
+                    client.submit_request(
+                        RequestType.CB_RETRIEVE_PRE_COMPUTED_V2,
+                        [
+                            key,
+                            matches_sorted,
+                            args.cb_retrieve_offset,
+                            instance_id,
+                            event2.ipc_handle(),
+                        ],
+                        get_response_class(RequestType.CB_RETRIEVE_PRE_COMPUTED_V2),
                     )
-                    t3 = now_ms()
-
-                    retrieve_ms = t3 - t2
-                    print(
-                        f"[cb][retrieve][{req_name}] protocol=v2 ok={ok2} "
-                        f"offset={args.cb_retrieve_offset} latency_ms={retrieve_ms:.3f}"
-                    )
-            else:
-                t0 = now_ms()
-                hit_ranges = client.submit_request(
-                    RequestType.CB_LOOKUP_PRE_COMPUTED,
-                    [key],
-                    get_response_class(RequestType.CB_LOOKUP_PRE_COMPUTED),
-                ).result(timeout=30)
-                t1 = now_ms()
-
-                lookup_ms = t1 - t0
-                ranges_sorted = sorted(hit_ranges, key=lambda x: x[0])
-                hits = len(ranges_sorted)
-                hit_tokens = sum((ed - st) for st, ed in ranges_sorted)
-                seg_summary = summarize_hit_ranges(
-                    ranges_sorted, prompt_pack.segment_ranges[req_name]
+                    .to_cuda_future()
+                    .result(timeout=40)
                 )
+                t3 = now_ms()
 
+                retrieve_ms = t3 - t2
                 print(
-                    f"[cb][lookup][{req_name}] protocol=v1 hits={hits} "
-                    f"hit_tokens={hit_tokens} latency_ms={lookup_ms:.3f} "
-                    f"segments={seg_summary}"
+                    f"[cb][retrieve][{req_name}] protocol={cb_protocol} ok={ok2} "
+                    f"offset={args.cb_retrieve_offset} latency_ms={retrieve_ms:.3f}"
                 )
-                for st, ed in ranges_sorted[: args.max_match_rows]:
-                    seg = locate_segment(prompt_pack.segment_ranges[req_name], st, ed)
-                    print(f"  cur=[{st},{ed}) seg={seg:<6}")
-                if len(ranges_sorted) > args.max_match_rows:
-                    print(f"  ... and {len(ranges_sorted) - args.max_match_rows} more")
-
-                if args.cb_retrieve_after_lookup:
-                    event2 = torch.cuda.Event(interprocess=True)
-                    event2.record()
-
-                    t2 = now_ms()
-                    ok2 = (
-                        client.submit_request(
-                            RequestType.CB_RETRIEVE_PRE_COMPUTED,
-                            [
-                                key,
-                                ranges_sorted,
-                                args.cb_retrieve_offset,
-                                instance_id,
-                                event2.ipc_handle(),
-                            ],
-                            get_response_class(RequestType.CB_RETRIEVE_PRE_COMPUTED),
-                        )
-                        .to_cuda_future()
-                        .result(timeout=40)
-                    )
-                    t3 = now_ms()
-
-                    retrieve_ms = t3 - t2
-                    print(
-                        f"[cb][retrieve][{req_name}] protocol=v1 ok={ok2} "
-                        f"offset={args.cb_retrieve_offset} latency_ms={retrieve_ms:.3f}"
-                    )
             print()
 
             cb_rows.append(
@@ -1036,6 +933,7 @@ def write_results(
     cb_rows: list[CBLookupMetrics],
     results_dir: str,
     run_tag: str,
+    args: argparse.Namespace | None = None,
 ) -> dict[str, Path]:
     out_dir = Path(results_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1044,7 +942,7 @@ def write_results(
 
     req_json = out_dir / f"{run_tag}_segment-hit-vllm-requests.json"
     req_csv = out_dir / f"{run_tag}_segment-hit-vllm-requests.csv"
-    req_payload = [asdict(row) for row in request_rows]
+    req_payload = [to_python_value(asdict(row)) for row in request_rows]
     req_json.write_text(json.dumps(req_payload, indent=2), encoding="utf-8")
     with req_csv.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(RequestMetrics.__dataclass_fields__.keys()))
@@ -1057,7 +955,7 @@ def write_results(
     if cb_rows:
         cb_json = out_dir / f"{run_tag}_segment-hit-vllm-cb.json"
         cb_csv = out_dir / f"{run_tag}_segment-hit-vllm-cb.csv"
-        cb_payload = [asdict(row) for row in cb_rows]
+        cb_payload = [to_python_value(asdict(row)) for row in cb_rows]
         cb_json.write_text(json.dumps(cb_payload, indent=2), encoding="utf-8")
         with cb_csv.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(CBLookupMetrics.__dataclass_fields__.keys()))
@@ -1066,6 +964,101 @@ def write_results(
 
         output_paths["cb_json"] = cb_json
         output_paths["cb_csv"] = cb_csv
+
+    req_summary = {
+        "request_count": len(req_payload),
+        "totals_ms": {
+            "request": to_float(sum(r["request_ms"] for r in req_payload)),
+            "lookup": to_float(sum(r["lookup_ms"] for r in req_payload)),
+            "retrieve": to_float(sum(r["retrieve_ms"] for r in req_payload)),
+            "store": to_float(sum(r["store_ms"] for r in req_payload)),
+        },
+        "mean_ms": {
+            "request": to_float(sum(r["request_ms"] for r in req_payload) / max(1, len(req_payload))),
+            "lookup": to_float(sum(r["lookup_ms"] for r in req_payload) / max(1, len(req_payload))),
+            "retrieve": to_float(sum(r["retrieve_ms"] for r in req_payload) / max(1, len(req_payload))),
+            "store": to_float(sum(r["store_ms"] for r in req_payload) / max(1, len(req_payload))),
+        },
+        "totals_tokens": {
+            "prompt_tokens": to_int(sum(r["prompt_tokens"] for r in req_payload)),
+            "lookup_hit_tokens": to_int(sum(r["lookup_hit_tokens"] for r in req_payload)),
+            "retrieve_hit_tokens": to_int(sum(r["retrieve_hit_tokens"] for r in req_payload)),
+            "store_tokens": to_int(sum(r["store_tokens"] for r in req_payload)),
+        },
+        "events": {
+            "lookup_events": to_int(sum(r["lookup_events"] for r in req_payload)),
+            "retrieve_events": to_int(sum(r["retrieve_events"] for r in req_payload)),
+            "store_events": to_int(sum(r["store_events"] for r in req_payload)),
+        },
+    }
+
+    cb_summary = {
+        "request_count": len(cb_rows),
+        "total_hits": to_int(sum(r.hits for r in cb_rows)),
+        "total_hit_tokens": to_int(sum(r.hit_tokens for r in cb_rows)),
+        "lookup_total_ms": to_float(sum(r.lookup_ms for r in cb_rows)),
+        "retrieve_total_ms": to_float(sum(r.retrieve_ms for r in cb_rows)),
+        "lookup_mean_ms": to_float(
+            sum(r.lookup_ms for r in cb_rows) / max(1, len(cb_rows))
+        ),
+        "retrieve_mean_ms": to_float(
+            sum(r.retrieve_ms for r in cb_rows) / max(1, len(cb_rows))
+        ),
+    }
+
+    summary_payload = {
+        "run_tag": run_tag,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "args": vars(args) if args is not None else None,
+        "request_summary": req_summary,
+        "cb_summary": cb_summary,
+        "files": {
+            "request_json": str(req_json),
+            "request_csv": str(req_csv),
+            "cb_json": str(output_paths.get("cb_json", "")),
+            "cb_csv": str(output_paths.get("cb_csv", "")),
+        },
+    }
+
+    summary_json = out_dir / f"{run_tag}_segment-hit-vllm-summary.json"
+    summary_json.write_text(json.dumps(to_python_value(summary_payload), indent=2), encoding="utf-8")
+    output_paths["summary_json"] = summary_json
+
+    summary_csv = out_dir / f"{run_tag}_segment-hit-vllm-summary.csv"
+    summary_rows = [
+        {"section": "request_totals_ms", "metric": "request", "value": req_summary["totals_ms"]["request"]},
+        {"section": "request_totals_ms", "metric": "lookup", "value": req_summary["totals_ms"]["lookup"]},
+        {"section": "request_totals_ms", "metric": "retrieve", "value": req_summary["totals_ms"]["retrieve"]},
+        {"section": "request_totals_ms", "metric": "store", "value": req_summary["totals_ms"]["store"]},
+        {"section": "request_mean_ms", "metric": "request", "value": req_summary["mean_ms"]["request"]},
+        {"section": "request_mean_ms", "metric": "lookup", "value": req_summary["mean_ms"]["lookup"]},
+        {"section": "request_mean_ms", "metric": "retrieve", "value": req_summary["mean_ms"]["retrieve"]},
+        {"section": "request_mean_ms", "metric": "store", "value": req_summary["mean_ms"]["store"]},
+        {
+            "section": "request_tokens",
+            "metric": "lookup_hit_tokens",
+            "value": req_summary["totals_tokens"]["lookup_hit_tokens"],
+        },
+        {
+            "section": "request_tokens",
+            "metric": "retrieve_hit_tokens",
+            "value": req_summary["totals_tokens"]["retrieve_hit_tokens"],
+        },
+        {
+            "section": "request_tokens",
+            "metric": "store_tokens",
+            "value": req_summary["totals_tokens"]["store_tokens"],
+        },
+        {"section": "cb", "metric": "total_hits", "value": cb_summary["total_hits"]},
+        {"section": "cb", "metric": "total_hit_tokens", "value": cb_summary["total_hit_tokens"]},
+        {"section": "cb", "metric": "lookup_total_ms", "value": cb_summary["lookup_total_ms"]},
+        {"section": "cb", "metric": "retrieve_total_ms", "value": cb_summary["retrieve_total_ms"]},
+    ]
+    with summary_csv.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["section", "metric", "value"])
+        writer.writeheader()
+        writer.writerows(summary_rows)
+    output_paths["summary_csv"] = summary_csv
 
     return output_paths
 
@@ -1106,6 +1099,18 @@ def parse_args() -> argparse.Namespace:
         help="Generation max_tokens for each request.",
     )
     parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=4096,
+        help="vLLM max_model_len. Keep this close to prompt lengths for stability.",
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=0.8,
+        help="vLLM gpu_memory_utilization.",
+    )
+    parser.add_argument(
         "--sleep-between",
         type=float,
         default=0.0,
@@ -1139,6 +1144,21 @@ def parse_args() -> argparse.Namespace:
         default="0.15",
         help="Value for LMCACHE_BLEND_RECOMPUTE_RATIOS, e.g. '0.15'.",
     )
+    parser.add_argument(
+        "--segment-chunks",
+        type=int,
+        default=2,
+        help=(
+            "Per-segment token length in units of chunk_size. "
+            "c1..c5 are built to chunk-aligned lengths."
+        ),
+    )
+    parser.add_argument(
+        "--warmup-chunks",
+        type=int,
+        default=2,
+        help="Warmup prompt token length in units of chunk_size.",
+    )
 
     parser.add_argument(
         "--skip-warmup",
@@ -1149,11 +1169,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-server", action="store_true")
     parser.add_argument(
         "--server-backend",
-        choices=["auto", "v1", "v2"],
-        default="auto",
+        choices=["auto", "v2"],
+        default="v2",
         help=(
             "Server backend to launch when --start-server is set. "
-            "auto: try blend_server_v2 then fallback to blend_server."
+            "Current repo supports blend_server_v2 only."
         ),
     )
     parser.add_argument("--host", default="localhost")
@@ -1167,11 +1187,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cb-protocol",
-        choices=["auto", "v1", "v2"],
+        choices=["auto", "v2"],
         default="auto",
         help=(
-            "CB lookup/retrieve protocol. auto picks v2 for blend_server_v2, "
-            "or v1 for blend_server fallback."
+            "CB lookup/retrieve protocol. Current repo uses v2 only "
+            "(CB_LOOKUP_PRE_COMPUTED_V2 / CB_RETRIEVE_PRE_COMPUTED_V2)."
         ),
     )
     parser.add_argument("--cb-retrieve-after-lookup", action="store_true")
@@ -1255,27 +1275,23 @@ def main() -> None:
             )
 
     selected_cb_protocol: CBProtocol = "v2"
-    if args.cb_protocol == "v1":
-        selected_cb_protocol = "v1"
-    elif args.cb_protocol == "v2":
-        selected_cb_protocol = "v2"
-    else:
-        if selected_server_backend == "blend_v1":
-            selected_cb_protocol = "v1"
-        else:
-            selected_cb_protocol = "v2"
-
-    if args.cb_verify and selected_server_backend == "blend_v1" and selected_cb_protocol == "v2":
-        raise RuntimeError(
-            "cb-protocol=v2 is incompatible with blend_server (v1 backend). "
-            "Use --cb-protocol v1, or launch a working blend_server_v2."
-        )
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     prompt_pack = build_prompt_pack(
         tokenizer=tokenizer,
         blend_special_str=os.getenv("LMCACHE_BLEND_SPECIAL_STR", "# #"),
+        chunk_size=args.chunk_size,
+        segment_chunks=args.segment_chunks,
+        warmup_chunks=args.warmup_chunks,
     )
+    max_prompt_tokens = max(len(v) for v in prompt_pack.prompts.values())
+    if max_prompt_tokens + args.max_tokens > args.max_model_len:
+        raise RuntimeError(
+            "Prompt length exceeds max_model_len budget: "
+            f"max_prompt_tokens={max_prompt_tokens}, max_tokens={args.max_tokens}, "
+            f"max_model_len={args.max_model_len}. "
+            "Increase --max-model-len or decrease --segment-chunks/--warmup-chunks."
+        )
 
     print(f"Using model: {args.model}")
     print(f"LMCACHE_CHUNK_SIZE={os.getenv('LMCACHE_CHUNK_SIZE')}")
@@ -1287,6 +1303,10 @@ def main() -> None:
     print(f"LMCACHE_FORCE_SKIP_SAVE={os.getenv('LMCACHE_FORCE_SKIP_SAVE')}")
     print(f"VLLM_ENABLE_V1_MULTIPROCESSING={os.getenv('VLLM_ENABLE_V1_MULTIPROCESSING')}")
     print(f"VLLM_WORKER_MULTIPROC_METHOD={os.getenv('VLLM_WORKER_MULTIPROC_METHOD')}")
+    print(f"max_model_len={args.max_model_len}")
+    print(f"gpu_memory_utilization={args.gpu_memory_utilization}")
+    print(f"segment_chunks={args.segment_chunks}")
+    print(f"warmup_chunks={args.warmup_chunks}")
     if args.cb_verify or args.start_server:
         print(f"blend_server_url=tcp://{args.host}:{args.port}")
     if args.start_server:
@@ -1330,7 +1350,11 @@ def main() -> None:
         print(f"blend_server_ready_via={ready_via.name}")
 
     try:
-        with build_llm_with_lmcache(model=args.model) as llm:
+        with build_llm_with_lmcache(
+            model=args.model,
+            max_model_len=args.max_model_len,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+        ) as llm:
             engine = LMCacheEngineBuilder.get(ENGINE_NAME)
             if engine is None:
                 raise RuntimeError("Failed to get LMCache engine instance")
@@ -1394,6 +1418,7 @@ def main() -> None:
             cb_rows=cb_rows,
             results_dir=args.results_dir,
             run_tag=run_tag,
+            args=args,
         )
         for k, path in output_paths.items():
             print(f"Saved {k}: {path}")

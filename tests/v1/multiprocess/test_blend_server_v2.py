@@ -63,6 +63,11 @@ SERVER_URL = f"tcp://{SERVER_HOST}:{SERVER_PORT}"
 CHUNK_SIZE = 256
 CPU_BUFFER_SIZE = 5.0
 DEFAULT_TIMEOUT = 10.0
+# The normal (non-CB) context is only used for a few bridge/isolation tests.
+# Keep it smaller than production-like defaults to avoid GPU memory pressure
+# when CB and normal contexts coexist in the same test.
+NORMAL_TEST_NUM_PAGES = 128
+NORMAL_TEST_NUM_LAYERS = 8
 
 
 # =============================================================================
@@ -559,7 +564,11 @@ def client_context() -> Generator[ClientContext, None, None]:
     if not torch.cuda.is_available():
         pytest.skip("CUDA is not available")
     device = torch.device("cuda:0")
-    ctx = ClientContext(device=device)
+    ctx = ClientContext(
+        device=device,
+        num_pages=NORMAL_TEST_NUM_PAGES,
+        num_layers=NORMAL_TEST_NUM_LAYERS,
+    )
     yield ctx
     del ctx.gpu_kv_caches
     torch.cuda.empty_cache()
@@ -606,7 +615,9 @@ def registered_instance(
         [instance_id, client_context.get_kv_cache(), "testmodel", 1, {}],
         get_response_class(RequestType.REGISTER_KV_CACHE),
     )
-    assert future.result(timeout=DEFAULT_TIMEOUT) is None
+    # Register can be slower than other sync calls because the server must
+    # build GPU-side context metadata from all KV layer tensors.
+    assert future.result(timeout=max(DEFAULT_TIMEOUT, 30.0)) is None
 
     yield instance_id
 

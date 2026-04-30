@@ -1,0 +1,76 @@
+{
+  "run_tag": "20260429T213616Z",
+  "generated_at_utc": "2026-04-29T21:36:16.389260+00:00",
+  "args": {
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "blend_special_str": "# #",
+    "chunk_size": 256,
+    "max_tokens": 1,
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.8,
+    "sleep_between": 0.0,
+    "use_disk": false,
+    "enable_sparse": false,
+    "use_layerwise": true,
+    "blend_check_layers": "1",
+    "blend_recompute_ratios": "0.15",
+    "segment_chunks": 3,
+    "warmup_chunks": 2,
+    "skip_warmup": false,
+    "start_server": false,
+    "server_backend": "v2",
+    "host": "localhost",
+    "port": 5567,
+    "cpu_buffer_size_gb": 5.0,
+    "cb_verify": false,
+    "cb_protocol": "auto",
+    "cb_retrieve_after_lookup": false,
+    "cb_retrieve_offset": 0,
+    "max_match_rows": 12,
+    "server_ready_timeout": 60.0,
+    "server_ready_probe_timeout": 2.0,
+    "server_ready_poll_interval": 1.0,
+    "results_dir": "/home/gcp-vm/projects/LMCache/experiments/blend/results"
+  },
+  "request_summary": {
+    "request_count": 6,
+    "totals_ms": {
+      "request": 2184.607106998563,
+      "lookup": 10.306650998245459,
+      "retrieve": 1185.1664430032542,
+      "store": 674.3345020040579
+    },
+    "mean_ms": {
+      "request": 364.10118449976045,
+      "lookup": 1.717775166374243,
+      "retrieve": 197.52774050054236,
+      "store": 112.38908366734297
+    },
+    "totals_tokens": {
+      "prompt_tokens": 12167,
+      "lookup_hit_tokens": 4676,
+      "retrieve_hit_tokens": 4664,
+      "store_tokens": 4326
+    },
+    "events": {
+      "lookup_events": 6,
+      "retrieve_events": 4,
+      "store_events": 6
+    }
+  },
+  "cb_summary": {
+    "request_count": 0,
+    "total_hits": 0,
+    "total_hit_tokens": 0,
+    "lookup_total_ms": 0.0,
+    "retrieve_total_ms": 0.0,
+    "lookup_mean_ms": 0.0,
+    "retrieve_mean_ms": 0.0
+  },
+  "files": {
+    "request_json": "/home/gcp-vm/projects/LMCache/experiments/blend/results/20260429T213616Z_segment-hit-vllm-requests.json",
+    "request_csv": "/home/gcp-vm/projects/LMCache/experiments/blend/results/20260429T213616Z_segment-hit-vllm-requests.csv",
+    "cb_json": "",
+    "cb_csv": ""
+  }
+}

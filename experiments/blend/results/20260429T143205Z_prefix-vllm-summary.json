@@ -1,0 +1,39 @@
+{
+  "run_tag": "20260429T143205Z",
+  "generated_at_utc": "2026-04-29T14:32:05.012840+00:00",
+  "args": {
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "blend_special_str": "# #",
+    "chunk_size": 256,
+    "max_tokens": 1,
+    "max_model_len": 4096,
+    "gpu_memory_utilization": 0.8,
+    "segment_chunks": 3,
+    "warmup_chunks": 2,
+    "sleep_between": 0.0,
+    "skip_warmup": false,
+    "use_disk": false,
+    "use_layerwise": true,
+    "enable_vllm_prefix_caching": false,
+    "results_dir": "/home/gcp-vm/projects/LMCache/experiments/blend/results"
+  },
+  "request_count": 6,
+  "totals": {
+    "request_ms": 1111.8332319995388,
+    "lookup_ms": 2.629456998874957,
+    "retrieve_ms": 142.5005470000542,
+    "store_ms": 916.9670930004941,
+    "lookup_hit_tokens": 3840,
+    "retrieve_hit_tokens": 3840,
+    "store_tokens": 8192,
+    "lookup_events": 6,
+    "retrieve_events": 2,
+    "store_events": 5
+  },
+  "mean_ms": {
+    "request_ms": 185.3055386665898,
+    "lookup_ms": 0.4382428331458262,
+    "retrieve_ms": 23.750091166675702,
+    "store_ms": 152.8278488334157
+  }
+}

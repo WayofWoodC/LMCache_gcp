@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Standard
+import inspect
 from typing import Any, Callable, Dict, Optional
 
 # Third Party
@@ -168,23 +169,36 @@ def get_fused_rope(
         )
         return None
 
-    new_rope_params = {
+    # vLLM get_rope API changed across versions:
+    # - older: expects `rope_parameters=...`
+    # - newer: expects explicit args such as `rotary_dim`, `base`, `rope_scaling`.
+    # Build kwargs from the actual signature to keep compatibility.
+    rope_parameters = {
         "rope_theta": base,
         "partial_rotary_factor": partial_rotary_factor,
     }
     if rope_scaling is not None:
-        new_rope_params.update(rope_scaling)
+        rope_parameters.update(rope_scaling)
         if "type" in rope_scaling:
-            new_rope_params["rope_type"] = rope_scaling["type"]
+            rope_parameters["rope_type"] = rope_scaling["type"]
 
-    rope = vllm_get_rope(
-        head_size=head_size,
-        max_position=max_position,
-        is_neox_style=is_neox_style,
-        rope_parameters=new_rope_params,
-        dtype=dtype,
-        dual_chunk_attention_config=None,
-    )
+    sig = inspect.signature(vllm_get_rope)
+    param_names = set(sig.parameters.keys())
+    candidate_kwargs: dict[str, Any] = {
+        "head_size": head_size,
+        "rotary_dim": rotary_dim,
+        "max_position": max_position,
+        "base": base,
+        "is_neox_style": is_neox_style,
+        "rope_scaling": rope_scaling,
+        "dtype": dtype,
+        "partial_rotary_factor": partial_rotary_factor,
+        "dual_chunk_attention_config": None,
+        "rope_parameters": rope_parameters,
+    }
+    rope_kwargs = {k: v for k, v in candidate_kwargs.items() if k in param_names}
+
+    rope = vllm_get_rope(**rope_kwargs)
 
     reverse_rope = BasicReverseRope(rope, rotary_dim, is_neox_style)
     fused_rope = FusedRope(rope, is_neox_style)

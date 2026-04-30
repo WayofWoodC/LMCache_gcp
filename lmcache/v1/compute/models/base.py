@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Standard
 from abc import ABC, abstractmethod
+import inspect
 
 # Third Party
 from torch import nn
@@ -57,6 +58,69 @@ class LMCBaseModel(nn.Module, ABC):
             is_neox_style=is_neox_style,
             dtype=dtype,
         )
+        self._embed_input_ids_fn = self._resolve_embed_input_ids_fn()
+
+    def _resolve_embed_input_ids_fn(self):
+        """Resolve a compatible embedding entrypoint across vLLM versions."""
+        model = self.vllm_model
+
+        # Legacy path used by older integrations.
+        get_input_embeddings = getattr(model, "get_input_embeddings", None)
+        if callable(get_input_embeddings):
+            try:
+                sig = inspect.signature(get_input_embeddings)
+                # For bound methods:
+                # - old style: get_input_embeddings(input_ids)
+                # - HF style: get_input_embeddings()
+                takes_input_ids = len(sig.parameters) >= 1
+            except (TypeError, ValueError):
+                takes_input_ids = False
+
+            if takes_input_ids:
+                def _via_get_input_embeddings(input_ids: torch.Tensor) -> torch.Tensor:
+                    return get_input_embeddings(input_ids)
+
+                return _via_get_input_embeddings
+
+            # HF-style API: get_input_embeddings() -> embedding module.
+            emb_layer = get_input_embeddings()
+            if callable(emb_layer):
+
+                def _via_hf_style(input_ids: torch.Tensor) -> torch.Tensor:
+                    return emb_layer(input_ids)
+
+                return _via_hf_style
+
+        # vLLM 0.11+ commonly exposes embed_input_ids at top-level model.
+        embed_input_ids = getattr(model, "embed_input_ids", None)
+        if callable(embed_input_ids):
+
+            def _via_embed_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
+                return embed_input_ids(input_ids)
+
+            return _via_embed_input_ids
+
+        inner = getattr(model, "model", None)
+        if inner is not None:
+            inner_embed_input_ids = getattr(inner, "embed_input_ids", None)
+            if callable(inner_embed_input_ids):
+
+                def _via_inner_embed_input_ids(input_ids: torch.Tensor) -> torch.Tensor:
+                    return inner_embed_input_ids(input_ids)
+
+                return _via_inner_embed_input_ids
+
+            embed_tokens = getattr(inner, "embed_tokens", None)
+            if callable(embed_tokens):
+
+                def _via_embed_tokens(input_ids: torch.Tensor) -> torch.Tensor:
+                    return embed_tokens(input_ids)
+
+                return _via_embed_tokens
+
+        raise AttributeError(
+            f"Cannot resolve embedding function for vLLM model type {type(model).__name__}"
+        )
 
     @abstractmethod
     def _process_qkv(self, q, k, v, layer):
@@ -69,7 +133,7 @@ class LMCBaseModel(nn.Module, ABC):
         input_ids: torch.Tensor,
     ):
         input_ids = input_ids.cuda()
-        hidden_states = self.vllm_model.get_input_embeddings(input_ids)
+        hidden_states = self._embed_input_ids_fn(input_ids)
         residual = None
 
         attn_output = None
