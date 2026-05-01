@@ -12,7 +12,7 @@ Goal:
   - r2: c2 + c1 + c3
   - r3: c2 + c1 + c3
   - r4: c4 + c1 + c3
-  - r5: c1 + c2 + c5
+  - r5: c5 + c3 + c1
 
 Modes:
 1) vLLM E2E blend mode (default)
@@ -48,6 +48,7 @@ import inspect
 import json
 import multiprocessing as mp
 import os
+import re
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -129,6 +130,77 @@ def now_ms() -> float:
     return time.perf_counter() * 1000.0
 
 
+def read_meminfo_kib(field: str) -> int | None:
+    try:
+        content = Path("/proc/meminfo").read_text(encoding="utf-8")
+    except Exception:
+        return None
+    match = re.search(rf"^{re.escape(field)}:\s+(\d+)\s+kB$", content, re.MULTILINE)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def kib_to_gib(kib: int) -> float:
+    return float(kib) / 1024.0 / 1024.0
+
+
+def print_memory_safety_hints(args: argparse.Namespace) -> None:
+    mem_total_kib = read_meminfo_kib("MemTotal")
+    swap_total_kib = read_meminfo_kib("SwapTotal")
+    if mem_total_kib is None or swap_total_kib is None:
+        return
+
+    mem_total_gib = kib_to_gib(mem_total_kib)
+    swap_total_gib = kib_to_gib(swap_total_kib)
+    print(f"host_mem_total_gib={mem_total_gib:.2f}")
+    print(f"host_swap_total_gib={swap_total_gib:.2f}")
+
+    if args.cb_verify and swap_total_gib < args.min_recommended_swap_gb:
+        print(
+            "[warn] cb-verify is enabled but swap is low. "
+            f"recommended_swap_gb>={args.min_recommended_swap_gb:.1f}, "
+            f"current_swap_gb={swap_total_gib:.2f}. "
+            "Low swap can increase OOM/reboot risk under cb-verify."
+        )
+
+
+def apply_cb_safe_low_pressure_profile(args: argparse.Namespace) -> list[str]:
+    if not args.cb_verify or not args.cb_safe_mode:
+        return []
+
+    changes: list[str] = []
+    if args.segment_chunks > 1:
+        changes.append(f"segment_chunks:{args.segment_chunks}->1")
+        args.segment_chunks = 1
+    if args.warmup_chunks > 1:
+        changes.append(f"warmup_chunks:{args.warmup_chunks}->1")
+        args.warmup_chunks = 1
+    if args.max_model_len > 3072:
+        changes.append(f"max_model_len:{args.max_model_len}->3072")
+        args.max_model_len = 3072
+    if args.gpu_memory_utilization > 0.72:
+        changes.append(f"gpu_memory_utilization:{args.gpu_memory_utilization}->0.72")
+        args.gpu_memory_utilization = 0.72
+    if args.cpu_buffer_size_gb > 1.0:
+        changes.append(f"cpu_buffer_size_gb:{args.cpu_buffer_size_gb}->1.0")
+        args.cpu_buffer_size_gb = 1.0
+    if args.lmcache_max_local_cpu_size_gb > 1.0:
+        changes.append(
+            "lmcache_max_local_cpu_size_gb:"
+            f"{args.lmcache_max_local_cpu_size_gb}->1.0"
+        )
+        args.lmcache_max_local_cpu_size_gb = 1.0
+    if args.lmcache_max_local_disk_size_gb > 2.0:
+        changes.append(
+            "lmcache_max_local_disk_size_gb:"
+            f"{args.lmcache_max_local_disk_size_gb}->2.0"
+        )
+        args.lmcache_max_local_disk_size_gb = 2.0
+
+    return changes
+
+
 def to_python_value(value: Any) -> Any:
     """Convert torch/numpy-like scalars and containers to JSON-safe Python values."""
     if isinstance(value, torch.Tensor):
@@ -173,6 +245,8 @@ def setup_environment_variables(
     use_layerwise: bool,
     blend_check_layers: str,
     blend_recompute_ratios: str,
+    lmcache_max_local_cpu_size_gb: float,
+    lmcache_max_local_disk_size_gb: float,
 ) -> None:
     os.environ["LMCACHE_CHUNK_SIZE"] = str(chunk_size)
     os.environ["LMCACHE_ENABLE_BLENDING"] = "True"
@@ -194,12 +268,12 @@ def setup_environment_variables(
 
     if use_disk:
         os.environ["LMCACHE_LOCAL_CPU"] = "False"
-        os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5"
+        os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = str(lmcache_max_local_cpu_size_gb)
         os.environ["LMCACHE_LOCAL_DISK"] = "file://local_disk/"
-        os.environ["LMCACHE_MAX_LOCAL_DISK_SIZE"] = "10"
+        os.environ["LMCACHE_MAX_LOCAL_DISK_SIZE"] = str(lmcache_max_local_disk_size_gb)
     else:
         os.environ["LMCACHE_LOCAL_CPU"] = "True"
-        os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = "5"
+        os.environ["LMCACHE_MAX_LOCAL_CPU_SIZE"] = str(lmcache_max_local_cpu_size_gb)
 
 
 def install_connector_probe() -> None:
@@ -386,7 +460,7 @@ def build_prompt_pack(
         "r2": [("c2", c2), ("c1", c1), ("c3", c3)],
         "r3": [("c2", c2), ("c1", c1), ("c3", c3)],
         "r4": [("c4", c4), ("c1", c1), ("c3", c3)],
-        "r5": [("c1", c1), ("c2", c2), ("c5", c5)],
+        "r5": [("c5", c5), ("c3", c3), ("c1", c1)],
     }
 
     prompts: dict[RequestName, list[int]] = {"warmup": warmup_prompt}
@@ -935,13 +1009,15 @@ def write_results(
     run_tag: str,
     args: argparse.Namespace | None = None,
 ) -> dict[str, Path]:
-    out_dir = Path(results_dir)
+    base_out_dir = Path(results_dir)
+    base_out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = base_out_dir / run_tag
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    output_paths: dict[str, Path] = {}
+    output_paths: dict[str, Path] = {"run_dir": out_dir}
 
-    req_json = out_dir / f"{run_tag}_segment-hit-vllm-requests.json"
-    req_csv = out_dir / f"{run_tag}_segment-hit-vllm-requests.csv"
+    req_json = out_dir / "requests.json"
+    req_csv = out_dir / "requests.csv"
     req_payload = [to_python_value(asdict(row)) for row in request_rows]
     req_json.write_text(json.dumps(req_payload, indent=2), encoding="utf-8")
     with req_csv.open("w", newline="", encoding="utf-8") as f:
@@ -953,8 +1029,8 @@ def write_results(
     output_paths["request_csv"] = req_csv
 
     if cb_rows:
-        cb_json = out_dir / f"{run_tag}_segment-hit-vllm-cb.json"
-        cb_csv = out_dir / f"{run_tag}_segment-hit-vllm-cb.csv"
+        cb_json = out_dir / "cb.json"
+        cb_csv = out_dir / "cb.csv"
         cb_payload = [to_python_value(asdict(row)) for row in cb_rows]
         cb_json.write_text(json.dumps(cb_payload, indent=2), encoding="utf-8")
         with cb_csv.open("w", newline="", encoding="utf-8") as f:
@@ -1020,11 +1096,11 @@ def write_results(
         },
     }
 
-    summary_json = out_dir / f"{run_tag}_segment-hit-vllm-summary.json"
+    summary_json = out_dir / "summary.json"
     summary_json.write_text(json.dumps(to_python_value(summary_payload), indent=2), encoding="utf-8")
     output_paths["summary_json"] = summary_json
 
-    summary_csv = out_dir / f"{run_tag}_segment-hit-vllm-summary.csv"
+    summary_csv = out_dir / "summary.csv"
     summary_rows = [
         {"section": "request_totals_ms", "metric": "request", "value": req_summary["totals_ms"]["request"]},
         {"section": "request_totals_ms", "metric": "lookup", "value": req_summary["totals_ms"]["lookup"]},
@@ -1179,6 +1255,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=5567)
     parser.add_argument("--cpu-buffer-size-gb", type=float, default=5.0)
+    parser.add_argument(
+        "--lmcache-max-local-cpu-size-gb",
+        type=float,
+        default=5.0,
+        help="Value for LMCACHE_MAX_LOCAL_CPU_SIZE.",
+    )
+    parser.add_argument(
+        "--lmcache-max-local-disk-size-gb",
+        type=float,
+        default=10.0,
+        help="Value for LMCACHE_MAX_LOCAL_DISK_SIZE (used with --use-disk).",
+    )
 
     parser.add_argument(
         "--cb-verify",
@@ -1215,6 +1303,27 @@ def parse_args() -> argparse.Namespace:
         default=1.0,
         help="Polling interval in seconds between server readiness probes.",
     )
+    parser.add_argument(
+        "--cb-safe-mode",
+        action="store_true",
+        default=True,
+        help=(
+            "When --cb-verify is enabled, automatically clamp memory-heavy knobs "
+            "to a safer low-pressure profile for stability."
+        ),
+    )
+    parser.add_argument(
+        "--no-cb-safe-mode",
+        action="store_false",
+        dest="cb_safe_mode",
+        help="Disable automatic low-pressure clamps under --cb-verify.",
+    )
+    parser.add_argument(
+        "--min-recommended-swap-gb",
+        type=float,
+        default=8.0,
+        help="Warn if host swap is below this value when --cb-verify is enabled.",
+    )
 
     parser.add_argument(
         "--results-dir",
@@ -1230,6 +1339,8 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
 
+    cb_safe_changes = apply_cb_safe_low_pressure_profile(args)
+
     configure_multiprocessing_for_vllm()
     setup_environment_variables(
         use_disk=args.use_disk,
@@ -1239,6 +1350,8 @@ def main() -> None:
         use_layerwise=args.use_layerwise,
         blend_check_layers=args.blend_check_layers,
         blend_recompute_ratios=args.blend_recompute_ratios,
+        lmcache_max_local_cpu_size_gb=args.lmcache_max_local_cpu_size_gb,
+        lmcache_max_local_disk_size_gb=args.lmcache_max_local_disk_size_gb,
     )
     install_connector_probe()
 
@@ -1301,12 +1414,20 @@ def main() -> None:
     print(f"LMCACHE_BLEND_RECOMPUTE_RATIOS={os.getenv('LMCACHE_BLEND_RECOMPUTE_RATIOS')}")
     print(f"LMCACHE_USE_LAYERWISE={os.getenv('LMCACHE_USE_LAYERWISE')}")
     print(f"LMCACHE_FORCE_SKIP_SAVE={os.getenv('LMCACHE_FORCE_SKIP_SAVE')}")
+    print(f"LMCACHE_MAX_LOCAL_CPU_SIZE={os.getenv('LMCACHE_MAX_LOCAL_CPU_SIZE')}")
+    print(f"LMCACHE_MAX_LOCAL_DISK_SIZE={os.getenv('LMCACHE_MAX_LOCAL_DISK_SIZE')}")
     print(f"VLLM_ENABLE_V1_MULTIPROCESSING={os.getenv('VLLM_ENABLE_V1_MULTIPROCESSING')}")
     print(f"VLLM_WORKER_MULTIPROC_METHOD={os.getenv('VLLM_WORKER_MULTIPROC_METHOD')}")
     print(f"max_model_len={args.max_model_len}")
     print(f"gpu_memory_utilization={args.gpu_memory_utilization}")
     print(f"segment_chunks={args.segment_chunks}")
     print(f"warmup_chunks={args.warmup_chunks}")
+    print(f"cpu_buffer_size_gb={args.cpu_buffer_size_gb}")
+    print(f"lmcache_max_local_cpu_size_gb={args.lmcache_max_local_cpu_size_gb}")
+    print(f"lmcache_max_local_disk_size_gb={args.lmcache_max_local_disk_size_gb}")
+    print(f"cb_safe_mode={args.cb_safe_mode}")
+    if cb_safe_changes:
+        print(f"cb_safe_mode_applied={', '.join(cb_safe_changes)}")
     if args.cb_verify or args.start_server:
         print(f"blend_server_url=tcp://{args.host}:{args.port}")
     if args.start_server:
@@ -1315,6 +1436,7 @@ def main() -> None:
             print(f"blend_server_backend_fallback_reason={server_backend_fallback_reason}")
     if args.cb_verify:
         print(f"cb_protocol={selected_cb_protocol}")
+    print_memory_safety_hints(args)
     print()
 
     print("Prompt token lengths:")

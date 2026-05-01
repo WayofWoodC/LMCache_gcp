@@ -522,7 +522,31 @@ def server_process() -> Generator[mp.Process, None, None]:
         daemon=True,
     )
     process.start()
-    time.sleep(3)
+
+    # Wait for the server to accept requests instead of relying on a fixed sleep.
+    # This avoids flaky startup races where the process is alive but the ZMQ
+    # handlers are not fully ready yet.
+    probe = MessageQueueClient(server_url=SERVER_URL, context=zmq.Context.instance())
+    try:
+        deadline = time.time() + 30.0
+        while time.time() < deadline:
+            if not process.is_alive():
+                pytest.fail("BlendEngineV2 server process exited during startup")
+            try:
+                chunk_size = probe.submit_request(
+                    RequestType.GET_CHUNK_SIZE,
+                    [],
+                    get_response_class(RequestType.GET_CHUNK_SIZE),
+                ).result(timeout=0.5)
+                if chunk_size == CHUNK_SIZE:
+                    break
+            except Exception:
+                time.sleep(0.1)
+        else:
+            pytest.fail("Timed out waiting for BlendEngineV2 server readiness")
+    finally:
+        probe.close()
+
     yield process
 
     if process.is_alive():
@@ -553,7 +577,9 @@ def cb_client_context() -> Generator[CBClientContext, None, None]:
     if not torch.cuda.is_available():
         pytest.skip("CUDA is not available")
     device = torch.device("cuda:0")
-    ctx = CBClientContext(device=device)
+    # Keep CB and normal contexts layer-compatible for bridge tests
+    # (CB_STORE_FINAL -> normal LOOKUP/RETRIEVE).
+    ctx = CBClientContext(device=device, num_layers=NORMAL_TEST_NUM_LAYERS)
     yield ctx
     del ctx.gpu_kv_cache
     torch.cuda.empty_cache()
@@ -1715,7 +1741,8 @@ def test_cb_store_final_v2_then_normal_lookup(
     )
 
     # Normal RETRIEVE
-    retrieve_key = create_cb_cache_key(token_ids, request_id="final-norm-retrieve-v2")
+    # Use the same request_id as LOOKUP so retrieve consumes the same lookup phase.
+    retrieve_key = create_cb_cache_key(token_ids, request_id=lookup_key.request_id)
     pages_per_chunk = 16
     gpu_block_ids = list(range(pages_per_chunk))
     event2 = torch.cuda.Event(interprocess=True)

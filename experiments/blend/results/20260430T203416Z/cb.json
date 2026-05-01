@@ -1,0 +1,42 @@
+[
+  {
+    "request": "r1",
+    "hits": 3,
+    "hit_tokens": 768,
+    "lookup_ms": 11.721506000030786,
+    "retrieve_ms": 0.0,
+    "segment_summary": "c1:1, c2:1, c3:1"
+  },
+  {
+    "request": "r2",
+    "hits": 3,
+    "hit_tokens": 768,
+    "lookup_ms": 1.6486879996955395,
+    "retrieve_ms": 0.0,
+    "segment_summary": "c1:1, c2:1, c3:1"
+  },
+  {
+    "request": "r3",
+    "hits": 3,
+    "hit_tokens": 768,
+    "lookup_ms": 1.4902020003646612,
+    "retrieve_ms": 0.0,
+    "segment_summary": "c1:1, c2:1, c3:1"
+  },
+  {
+    "request": "r4",
+    "hits": 2,
+    "hit_tokens": 512,
+    "lookup_ms": 1.4381590001285076,
+    "retrieve_ms": 0.0,
+    "segment_summary": "c1:1, c3:1"
+  },
+  {
+    "request": "r5",
+    "hits": 2,
+    "hit_tokens": 512,
+    "lookup_ms": 1.391162000130862,
+    "retrieve_ms": 0.0,
+    "segment_summary": "c1:1, c3:1"
+  }
+]
